@@ -155,25 +155,21 @@ def get_student_current_semester(student_id):
 def get_all_courses():
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT CourseCode, CourseName, DefaultSemester, CreditHours, Cohort, Program, IsKokurikulum FROM Courses ORDER BY DefaultSemester, CourseCode")
+            cur.execute("SELECT CourseCode, CourseName, DefaultSemester, CreditHours, Cohort, Program, CourseGroup FROM Courses ORDER BY DefaultSemester, CourseCode")
             return cur.fetchall()
 
 def is_placeholder_code(code):
-    """Check if course code is a placeholder (contains 'XX' or 'XXXXXX' or ends with 'X')."""
     return 'XX' in code or 'XXXXXX' in code or code.endswith('X')
 
-def add_course(code, name, semester, credits, cohort=None, program=None, is_kokurikulum=False):
-    # If placeholder code and already exists, append a number
+def add_course(code, name, semester, credits, cohort=None, program=None, course_group=None):
     original_code = code.upper()
     final_code = original_code
     if is_placeholder_code(original_code):
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Find existing codes with same base
                 cur.execute("SELECT CourseCode FROM Courses WHERE CourseCode LIKE %s", (original_code + '%',))
                 existing = [row[0] for row in cur.fetchall()]
                 if original_code in existing:
-                    # Find max suffix number
                     max_num = 0
                     for ec in existing:
                         if ec == original_code:
@@ -189,32 +185,40 @@ def add_course(code, name, semester, credits, cohort=None, program=None, is_koku
         cohort = cohort.upper()
     if program:
         program = program.upper()
+    if course_group:
+        course_group = course_group.upper()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO Courses (CourseCode, CourseName, DefaultSemester, CreditHours, Cohort, Program, IsKokurikulum) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (final_code, name, semester, credits, cohort, program, is_kokurikulum)
+                "INSERT INTO Courses (CourseCode, CourseName, DefaultSemester, CreditHours, Cohort, Program, CourseGroup) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (final_code, name, semester, credits, cohort, program, course_group)
             )
             conn.commit()
     return final_code
 
-def update_course(code, name, semester, credits, cohort=None, program=None, is_kokurikulum=None):
+def update_course(code, name, semester, credits, cohort=None, program=None, course_group=None):
     if cohort:
         cohort = cohort.upper()
     if program:
         program = program.upper()
+    if course_group:
+        course_group = course_group.upper()
     with get_connection() as conn:
         with conn.cursor() as cur:
-            if is_kokurikulum is not None:
-                cur.execute(
-                    "UPDATE Courses SET CourseName = %s, DefaultSemester = %s, CreditHours = %s, Cohort = %s, Program = %s, IsKokurikulum = %s WHERE CourseCode = %s",
-                    (name, semester, credits, cohort, program, is_kokurikulum, code.upper())
-                )
-            else:
-                cur.execute(
-                    "UPDATE Courses SET CourseName = %s, DefaultSemester = %s, CreditHours = %s, Cohort = %s, Program = %s WHERE CourseCode = %s",
-                    (name, semester, credits, cohort, program, code.upper())
-                )
+            set_parts = ["CourseName = %s", "DefaultSemester = %s", "CreditHours = %s"]
+            params = [name, semester, credits]
+            if cohort is not None:
+                set_parts.append("Cohort = %s")
+                params.append(cohort)
+            if program is not None:
+                set_parts.append("Program = %s")
+                params.append(program)
+            if course_group is not None:
+                set_parts.append("CourseGroup = %s")
+                params.append(course_group)
+            params.append(code.upper())
+            sql = f"UPDATE Courses SET {', '.join(set_parts)} WHERE CourseCode = %s"
+            cur.execute(sql, tuple(params))
             conn.commit()
 
 def delete_course(code):
@@ -290,7 +294,6 @@ def get_student_enrollments(student_id):
             return cur.fetchall()
 
 def get_failed_courses(student_id):
-    """Return list of course codes that the student failed (D, F, TANGGUH)."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -299,7 +302,7 @@ def get_failed_courses(student_id):
                 WHERE StudentID = %s AND Grade IN ('D', 'F', 'TANGGUH')
                 ORDER BY SemesterSession DESC
             """, (student_id,))
-            return cur.fetchall()  # returns (course_code, attempt_type, grade)
+            return cur.fetchall()
 
 def add_enrollment(student_id, course_code, semester_session, attempt_type, grade):
     with get_connection() as conn:
@@ -342,52 +345,67 @@ def get_max_credits_by_cgpa(cgpa):
         return 12
 
 def get_student_future_courses(student_id, current_semester):
-    """
-    Return recommended courses from future semesters based on CGPA and dropped prerequisites.
-    Returns list of dicts with course info and a flag 'is_dropped_prereq'.
-    """
     cgpa = get_student_cgpa(student_id)
     max_credits = get_max_credits_by_cgpa(cgpa)
 
-    # Get all failed courses from previous semesters (including current? we only want previous)
-    failed = get_failed_courses(student_id)  # list of (course_code, attempt_type, grade)
-    failed_codes = [f[0] for f in failed]
+    failed = get_failed_courses(student_id)
+    failed_codes = {f[0] for f in failed}
 
-    # Get all courses from semesters > current_semester
+    enrollments = get_student_enrollments(student_id)
+    passed_codes = {e[2] for e in enrollments if e[5] in ('A','B','C')}
+    taken_codes = {e[2] for e in enrollments}
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT CourseCode, CourseName, DefaultSemester, CreditHours, Cohort, Program, IsKokurikulum
+                SELECT CourseCode, CourseName, DefaultSemester, CreditHours, Cohort, Program, CourseGroup
                 FROM Courses
                 WHERE DefaultSemester > %s
                 ORDER BY DefaultSemester, CourseCode
             """, (current_semester,))
-            future_courses = cur.fetchall()  # list of tuples
+            future_courses = cur.fetchall()
 
-    # For each future course, check if it's a dropped prerequisite (i.e., its CourseCode is in failed_codes)
-    # Also check if prerequisites are satisfied (student has passed all prereqs)
+            course_codes = [row[0] for row in future_courses]
+            if course_codes:
+                cur.execute("""
+                    SELECT CourseCode, PrereqCode
+                    FROM Prerequisites
+                    WHERE CourseCode = ANY(%s)
+                    ORDER BY CourseCode, PrereqCode
+                """, (course_codes,))
+                prereq_rows = cur.fetchall()
+            else:
+                prereq_rows = []
+
+        prereq_map = {}
+        for ccode, pcode in prereq_rows:
+            if ccode not in prereq_map:
+                prereq_map[ccode] = []
+            prereq_map[ccode].append(pcode)
+
     recommended = []
     total_credits = 0
+
     for course in future_courses:
-        code, name, sem, cred, cohort, prog, is_koku = course
-        # Check if this course is a failed course from previous semesters (dropped)
+        code, name, sem, cred, cohort, prog, group = course
+        if code in passed_codes:
+            continue
         is_dropped = code in failed_codes
-        # Check prerequisites
-        prereqs = get_course_prerequisite(code)
+        prereqs = prereq_map.get(code, [])
         prereqs_satisfied = True
         for p in prereqs:
-            # Check if student has passed p (grade A,B,C)
-            with get_connection() as conn2:
-                with conn2.cursor() as cur2:
-                    cur2.execute("""
-                        SELECT 1 FROM Enrollments
-                        WHERE StudentID = %s AND CourseCode = %s AND Grade IN ('A','B','C')
-                    """, (student_id, p))
-                    if not cur2.fetchone():
-                        prereqs_satisfied = False
-                        break
+            if p in passed_codes:
+                continue
+            if p in failed_codes:
+                is_dropped = True
+            else:
+                if p not in taken_codes:
+                    prereqs_satisfied = False
+                    break
+        if code in failed_codes:
+            is_dropped = True
+            prereqs_satisfied = True
         if prereqs_satisfied or is_dropped:
-            # Prioritize dropped prerequisites
             recommended.append({
                 'code': code,
                 'name': name,
@@ -397,11 +415,10 @@ def get_student_future_courses(student_id, current_semester):
                 'prereqs_satisfied': prereqs_satisfied,
                 'cohort': cohort,
                 'program': prog,
-                'is_kokurikulum': is_koku
+                'course_group': group
             })
             total_credits += cred
 
-    # Sort: dropped prerequisites first, then by semester
     recommended.sort(key=lambda x: (not x['is_dropped'], x['semester']))
 
     return {

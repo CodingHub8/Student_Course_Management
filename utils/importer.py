@@ -4,11 +4,9 @@ import re
 import os
 from database.models import (add_course, add_prerequisite, add_student,
                              add_enrollment, get_all_advisors)
-from database.connection import get_connection
 
 # ---------- Excel sheet helpers ----------
 def get_excel_sheet_names(file_path):
-    """Return list of sheet names in an Excel file."""
     xl = pd.ExcelFile(file_path)
     return xl.sheet_names
 
@@ -57,7 +55,6 @@ def parse_pdf(file_path):
                 df.columns = [re.sub(r'\s+', ' ', col).strip() for col in df.columns]
                 df = df.loc[:, df.columns.str.len() > 0]
                 return df
-        # Fallback to regex – only captures Code and Name, no credits
         text = ""
         for page in pdf.pages:
             text += page.extract_text() or ""
@@ -68,7 +65,7 @@ def parse_pdf(file_path):
             return df
         raise ValueError("Could not parse PDF. No tables or recognizable course codes found.")
 
-# ---------- Auto Mapping ----------
+# ---------- Auto Mapping (updated with new columns) ----------
 def auto_map_columns(columns, import_type):
     mapping = {}
     if import_type in ['All', 'Courses']:
@@ -82,6 +79,14 @@ def auto_map_columns(columns, import_type):
                 mapping['DefaultSemester'] = col
             elif 'credithours' in lc or 'credits' in lc or 'credit' in lc:
                 mapping['CreditHours'] = col
+            elif 'prerequisite' in lc or 'prereq' in lc:
+                mapping['Prerequisite'] = col
+            elif 'program' in lc:
+                mapping['Program'] = col
+            elif 'cohort' in lc:
+                mapping['Cohort'] = col
+            elif 'coursegroup' in lc or 'group' in lc:
+                mapping['CourseGroup'] = col
     if import_type in ['All', 'Prerequisites']:
         for col in columns:
             lc = col.lower().strip()
@@ -100,8 +105,12 @@ def auto_map_columns(columns, import_type):
                 mapping['CurrentCGPA'] = col
             elif 'kelas' in lc or 'class' in lc:
                 mapping['Class'] = col
-            elif 'Academic Advisor' in lc or 'penasihat' in lc:
+            elif 'advisor' in lc or 'penasihat' in lc:
                 mapping['Advisor'] = col
+            elif 'program' in lc:
+                mapping['Program'] = col
+            elif 'currentsemester' in lc or 'semester' in lc:
+                mapping['CurrentSemester'] = col
     if import_type in ['All', 'Enrollments']:
         for col in columns:
             lc = col.lower().strip()
@@ -119,17 +128,11 @@ def auto_map_columns(columns, import_type):
 
 # ---------- Import Functions ----------
 def infer_credit_from_code(code):
-    """Get credit from last digit of course code (common convention)."""
     if code and code[-1].isdigit():
         return int(code[-1])
     return 0
 
 def import_courses(df, required_columns):
-    """
-    Import courses from a DataFrame.
-    Expected columns: CourseCode, CourseName, DefaultSemester, CreditHours.
-    If CreditHours is missing or 0, infer from last digit of CourseCode.
-    """
     count = 0
     for _, row in df.iterrows():
         try:
@@ -137,12 +140,42 @@ def import_courses(df, required_columns):
             name = row.get('CourseName')
             if not code or not name:
                 continue
-            sem = int(row.get('DefaultSemester', 1))
-            credits = int(row.get('CreditHours', 0))
-            # If credits is 0, try to infer from last digit
-            if credits == 0:
+            sem = row.get('DefaultSemester')
+            if pd.isna(sem) or sem is None:
+                sem = 1
+            else:
+                sem = int(sem)
+            credits = row.get('CreditHours')
+            if pd.isna(credits) or credits is None:
                 credits = infer_credit_from_code(code)
-            add_course(code, name, sem, credits)
+            else:
+                credits = int(credits)
+            prereq_val = row.get('Prerequisite')
+            prereq = None
+            if pd.notna(prereq_val) and str(prereq_val).strip():
+                prereq = str(prereq_val).strip()
+            program = row.get('Program')
+            if pd.isna(program) or not str(program).strip():
+                program = None
+            else:
+                program = str(program).strip()
+            cohort = row.get('Cohort')
+            if pd.isna(cohort) or not str(cohort).strip():
+                cohort = None
+            else:
+                cohort = str(cohort).strip()
+            course_group = row.get('CourseGroup')
+            if pd.isna(course_group) or not str(course_group).strip():
+                course_group = None
+            else:
+                course_group = str(course_group).strip()
+            # Add course
+            add_course(code, name, sem, credits, cohort, program, course_group)
+            if prereq:
+                try:
+                    add_prerequisite(code, prereq)
+                except Exception as e:
+                    print(f"Warning: Failed to add prerequisite {prereq} for {code}: {e}")
             count += 1
         except Exception as e:
             print(f"Error importing course {row}: {e}")
@@ -165,7 +198,10 @@ def import_prerequisites(df, required_columns):
 
 def import_students(df, required_columns):
     count = 0
-    advisors = {uname: uid for uid, uname, _ in get_all_advisors()}
+    advisors = {}
+    for uid, uname, fullname, _ in get_all_advisors():
+        advisors[uname] = uid
+        advisors[fullname] = uid
     for _, row in df.iterrows():
         try:
             matric = row.get('MatricNo')
@@ -180,7 +216,17 @@ def import_students(df, required_columns):
                 advisor_id = advisors.get(advisor_name)
                 if advisor_id is None:
                     print(f"Warning: Advisor '{advisor_name}' not found. Student will be unassigned.")
-            add_student(matric, name, cgpa, class_name, advisor_id)
+            program = row.get('Program')
+            if pd.isna(program) or not str(program).strip():
+                program = None
+            else:
+                program = str(program).strip()
+            current_semester = row.get('CurrentSemester')
+            if pd.isna(current_semester) or current_semester is None:
+                current_semester = 1
+            else:
+                current_semester = int(current_semester)
+            add_student(matric, name, cgpa, class_name, advisor_id, program, current_semester)
             count += 1
         except Exception as e:
             print(f"Error importing student {row}: {e}")

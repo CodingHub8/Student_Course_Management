@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QComboBox, QLineEdit, QPushButton, QMessageBox, QLabel, \
-    QCheckBox, QSpinBox
+    QCheckBox, QSpinBox, QRadioButton, QHBoxLayout
 from database.models import get_all_students, get_all_courses, get_all_advisors, get_students_by_advisor_for_dropdown
 
 class AddEnrollmentDialog(QDialog):
@@ -22,7 +22,7 @@ class AddEnrollmentDialog(QDialog):
         self.course_combo = QComboBox()
         courses = get_all_courses()
         for course in courses:
-            # course is (code, name, sem, credit, cohort)
+            # course is (code, name, sem, credit, cohort, program, is_koku, group)
             code, name, sem, cred, cohort = course[:5]
             if sem == semester:
                 self.course_combo.addItem(f"{code} - {name}", code)
@@ -66,7 +66,7 @@ class AddCourseDialog(QDialog):
         self.user_cohort = user_cohort
         self.user_program = user_program
         self.setWindowTitle("Add Course")
-        self.setFixedSize(450, 400 if current_role == 'System Administrator' else 350)
+        self.setFixedSize(450, 480 if current_role in ('admin', 'System Administrator') else 400)
         layout = QVBoxLayout()
         form = QFormLayout()
 
@@ -78,42 +78,65 @@ class AddCourseDialog(QDialog):
         self.sem_edit.setPlaceholderText("Semester (1-6)")
         self.cred_edit = QLineEdit()
         self.cred_edit.setPlaceholderText("Credit Hours")
-        self.koku_check = QCheckBox("Kokurikulum (e.g., Sukan, Kelab/Persatuan, Unit Beruniform)")
 
         self.prereq_edit = QLineEdit()
         self.prereq_edit.setPlaceholderText("Leave empty if none (comma-separated codes)")
 
+        # Radio buttons for Course Group (admin only)
+        self.koku_check = QRadioButton("Kokurikulum (contoh, Sukan, Kelab/Persatuan, Unit Beruniform)")
+        self.mpu_check = QRadioButton("Subjek Khas (contoh, Sains Islam, Nilai Masyarakat Malaysia)")
+        self.elective_check = QRadioButton("Subjek Elektif")
+
         # Cohort – only visible for admin
         self.cohort_edit = QLineEdit()
         self.cohort_edit.setPlaceholderText("e.g., SESI 1 2025/2026")
-        if current_role == 'System Administrator':
+        if current_role in ('admin', 'System Administrator'):
             self.cohort_edit.setVisible(True)
         else:
             self.cohort_edit.setVisible(False)
             self.cohort_edit.setText(user_cohort if user_cohort else "")
 
-        # Program – only visible for admin
+        # Program – only visible for admin, with "Other" text box
         self.program_combo = QComboBox()
         self.program_combo.addItems(["DEE", "DDT", "DET", "Other"])
-        if current_role == 'System Administrator':
+        self.program_combo.currentIndexChanged.connect(self.on_program_changed)
+        self.program_other_edit = QLineEdit()
+        self.program_other_edit.setPlaceholderText("Enter other program name")
+        self.program_other_edit.setVisible(False)
+
+        if current_role in ('admin', 'System Administrator'):
             self.program_combo.setVisible(True)
+            self.program_other_edit.setVisible(False)
         else:
             self.program_combo.setVisible(False)
-            # Auto‑select the advisor's program
+            self.program_other_edit.setVisible(False)
             if user_program:
                 idx = self.program_combo.findText(user_program)
                 if idx >= 0:
                     self.program_combo.setCurrentIndex(idx)
                 else:
-                    self.program_combo.setCurrentText(user_program)
+                    self.program_combo.setCurrentText("Other")
+                    self.program_other_edit.setText(user_program)
+                    self.program_other_edit.setVisible(True)
 
+        # Layout
         form.addRow("Course Code:", self.code_edit)
         form.addRow("Name:", self.name_edit)
         form.addRow("Default Semester:", self.sem_edit)
         form.addRow("Credits:", self.cred_edit)
-        if current_role == 'System Administrator':
+
+        if current_role in ('admin', 'System Administrator'):
             form.addRow("Cohort:", self.cohort_edit)
-            form.addRow("Program:", self.program_combo)
+            # Program row: combo + "Other" text box
+            prog_layout = QHBoxLayout()
+            prog_layout.addWidget(self.program_combo)
+            prog_layout.addWidget(self.program_other_edit)
+            form.addRow("Program:", prog_layout)
+            # Course group radio buttons
+            form.addRow("Course Group:", self.koku_check)
+            form.addRow("", self.mpu_check)
+            form.addRow("", self.elective_check)
+
         form.addRow("Prerequisites:", self.prereq_edit)
 
         btn_ok = QPushButton("Add")
@@ -123,11 +146,39 @@ class AddCourseDialog(QDialog):
         layout.addWidget(btn_ok)
         self.setLayout(layout)
 
+    def on_program_changed(self, index):
+        if self.program_combo.currentText() == "Other":
+            self.program_other_edit.setVisible(True)
+        else:
+            self.program_other_edit.setVisible(False)
+            self.program_other_edit.clear()
+
     def get_data(self):
         prereq_str = self.prereq_edit.text().strip()
         prereq_list = [p.strip() for p in prereq_str.split(',') if p.strip()] if prereq_str else []
         cohort_val = self.cohort_edit.text().strip().upper() if self.cohort_edit.text().strip() else None
-        program_val = self.program_combo.currentText().strip().upper() if self.program_combo.isVisible() else None
+
+        # Program
+        if self.program_combo.isVisible():
+            if self.program_combo.currentText() == "Other":
+                program_val = self.program_other_edit.text().strip().upper()
+                if not program_val:
+                    program_val = "OTHER"
+            else:
+                program_val = self.program_combo.currentText().strip().upper()
+        else:
+            program_val = None
+
+        # Course group from radio buttons
+        if self.koku_check.isChecked():
+            group_val = "KOKURIKULUM"
+        elif self.mpu_check.isChecked():
+            group_val = "SUBJEK KHAS"
+        elif self.elective_check.isChecked():
+            group_val = "ELEKTIF"
+        else:
+            group_val = None
+
         return {
             'code': self.code_edit.text().strip(),
             'name': self.name_edit.text().strip(),
@@ -135,7 +186,8 @@ class AddCourseDialog(QDialog):
             'credits': int(self.cred_edit.text()) if self.cred_edit.text().isdigit() else 0,
             'prerequisites': prereq_list,
             'cohort': cohort_val,
-            'program': program_val
+            'program': program_val,
+            'course_group': group_val
         }
 
 
@@ -152,7 +204,7 @@ class AddPrereqDialog(QDialog):
         self.koku_check = QCheckBox("Kokurikulum")
         courses = get_all_courses()
         for course in courses:
-            # course is (code, name, sem, credit, cohort)
+            # course is (code, name, sem, credit, cohort, program, is_koku, group)
             code, name = course[0], course[1]
             display = f"{code} - {name}"
             self.course_combo.addItem(display, code)
@@ -208,16 +260,25 @@ class AddStudentDialog(QDialog):
         # Program – only visible for admin
         self.program_combo = QComboBox()
         self.program_combo.addItems(["DEE", "DDT", "DET", "Other"])
-        if current_role == 'System Administrator':
+        self.program_other_edit = QLineEdit()
+        self.program_other_edit.setPlaceholderText("Enter other program name")
+        self.program_other_edit.setVisible(False)
+        self.program_combo.currentIndexChanged.connect(self.on_program_changed)
+
+        if current_role in ('admin', 'System Administrator'):
             self.program_combo.setVisible(True)
+            self.program_other_edit.setVisible(False)
         else:
             self.program_combo.setVisible(False)
+            self.program_other_edit.setVisible(False)
             if user_program:
                 idx = self.program_combo.findText(user_program)
                 if idx >= 0:
                     self.program_combo.setCurrentIndex(idx)
                 else:
-                    self.program_combo.setCurrentText(user_program)
+                    self.program_combo.setCurrentText("Other")
+                    self.program_other_edit.setText(user_program)
+                    self.program_other_edit.setVisible(True)
 
         # Advisor selection – only show for admin
         self.advisor_combo = QComboBox()
@@ -241,8 +302,12 @@ class AddStudentDialog(QDialog):
         form.addRow("CGPA:", self.cgpa_edit)
         form.addRow("Class:", self.class_edit)
         form.addRow("Current Semester:", self.semester_spin)
-        if current_role == 'System Administrator':
-            form.addRow("Program:", self.program_combo)
+
+        if current_role in ('admin', 'System Administrator'):
+            prog_layout = QHBoxLayout()
+            prog_layout.addWidget(self.program_combo)
+            prog_layout.addWidget(self.program_other_edit)
+            form.addRow("Program:", prog_layout)
             form.addRow("Academic Advisor:", self.advisor_combo)
 
         btn_ok = QPushButton("Add")
@@ -252,6 +317,13 @@ class AddStudentDialog(QDialog):
         layout.addWidget(btn_ok)
         self.setLayout(layout)
 
+    def on_program_changed(self, index):
+        if self.program_combo.currentText() == "Other":
+            self.program_other_edit.setVisible(True)
+        else:
+            self.program_other_edit.setVisible(False)
+            self.program_other_edit.clear()
+
     def get_data(self):
         cgpa = 0.0
         try:
@@ -259,11 +331,19 @@ class AddStudentDialog(QDialog):
         except ValueError:
             pass
 
-        program_val = self.program_combo.currentText().strip().upper() if self.program_combo.isVisible() else None
+        # Program: get from combo or "Other" text
+        if self.program_combo.isVisible():
+            if self.program_combo.currentText() == "Other":
+                program_val = self.program_other_edit.text().strip().upper()
+                if not program_val:
+                    program_val = "OTHER"
+            else:
+                program_val = self.program_combo.currentText().strip().upper()
+        else:
+            program_val = self.user_program  # auto-set for advisor
+
         if self.current_role == 'Academic Advisor':
             advisor_id = self._fixed_advisor_id
-            # If advisor, program is auto‑set to advisor's program (already stored)
-            program_val = self.user_program
         else:
             advisor_id = self.advisor_combo.currentData()
 
@@ -273,5 +353,6 @@ class AddStudentDialog(QDialog):
             'cgpa': cgpa,
             'class': self.class_edit.text().strip(),
             'advisor_id': advisor_id,
-            'program': program_val
-        }
+            'program': program_val,
+            'current_semester': self.semester_spin.value()
+    }

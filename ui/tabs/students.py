@@ -35,57 +35,46 @@ class StudentsTab(QWidget):
         self.refresh()
 
     def refresh(self):
-        # Disconnect signal and block signals during population
         self.table.cellChanged.disconnect(self.on_cell_changed)
         self.table.blockSignals(True)
-
-        # Clear table
         self.table.setRowCount(0)
 
-        # Set columns based on role
         if self.advisor_id:
             rows = get_students_by_advisor(self.advisor_id)
-            # rows: (matric, name, cgpa, class, total_cred, current_cred, program)
+            # rows: (matric, name, cgpa, class, total_cred, current_cred, program, current_semester)
             self.table.setColumnCount(8)
-            self.table.setHorizontalHeaderLabels(
-                ["Matric", "Name", "CGPA", "Class", "Total Credits", "Current Credits", "Program", "Current Semester"])
+            self.table.setHorizontalHeaderLabels(["Matric", "Name", "CGPA", "Class", "Total Credits", "Current Credits", "Program", "Current Semester"])
         else:
             rows = get_all_students()
-            # rows: (matric, name, cgpa, class, total_cred, current_cred, advisor_name, program)
+            # rows: (matric, name, cgpa, class, total_cred, current_cred, advisor_name, program, current_semester)
             self.table.setColumnCount(9)
             self.table.setHorizontalHeaderLabels(["Matric", "Name", "CGPA", "Class", "Total Credits", "Current Credits", "Advisor", "Program", "Current Semester"])
 
         self.table.setRowCount(len(rows))
         for i, row in enumerate(rows):
-            # Matric (index 0)
             self.table.setItem(i, 0, QTableWidgetItem(row[0] if row[0] else ""))
-            # Name (index 1)
             self.table.setItem(i, 1, QTableWidgetItem(row[1] if row[1] else ""))
-            # CGPA (index 2)
             self.table.setItem(i, 2, QTableWidgetItem(str(row[2]) if row[2] is not None else "0.0"))
-            # Class (index 3)
             self.table.setItem(i, 3, QTableWidgetItem(row[3] if row[3] else ""))
-            # Total Credits (index 4)
             self.table.setItem(i, 4, QTableWidgetItem(str(row[4]) if row[4] is not None else "0"))
-            # Current Credits (index 5)
             self.table.setItem(i, 5, QTableWidgetItem(str(row[5]) if row[5] is not None else "0"))
 
             if self.advisor_id:
-                # Program is at index 6
+                # Program at index 6, CurrentSemester at index 7
                 self.table.setItem(i, 6, QTableWidgetItem(row[6] if row[6] else ""))
+                self.table.setItem(i, 7, QTableWidgetItem(str(row[7]) if row[7] is not None else "1"))
             else:
-                # For admin, advisor_name at index 6, program at index 7
+                # advisor_name at index 6, program at 7, current_semester at 8
                 self.table.setItem(i, 6, QTableWidgetItem(row[6] if row[6] else "Unassigned"))
                 self.table.setItem(i, 7, QTableWidgetItem(row[7] if row[7] else ""))
-                self.table.setItem(i, 8, QTableWidgetItem(str(row[8]) if row[8] else "1"))
+                self.table.setItem(i, 8, QTableWidgetItem(str(row[8]) if row[8] is not None else "1"))
 
-        # Unblock signals and reconnect
         self.table.blockSignals(False)
         self.table.resizeColumnsToContents()
         self.table.cellChanged.connect(self.on_cell_changed)
 
     def on_cell_changed(self, row, col):
-        # Only allow editing of Name, CGPA, Class (cols 1,2,3)
+        # Allow editing Name, CGPA, Class (cols 1,2,3) and possibly CurrentSemester? For now, only those.
         if col not in [1,2,3]:
             return
         matric_item = self.table.item(row, 0)
@@ -93,7 +82,6 @@ class StudentsTab(QWidget):
             return
         matric = matric_item.text().strip()
         if not matric:
-            # If Matric is empty, ignore – cannot update without identifier
             return
 
         name = self.table.item(row, 1).text().strip() if self.table.item(row, 1) else ""
@@ -105,7 +93,6 @@ class StudentsTab(QWidget):
         except ValueError:
             cgpa = 0.0
 
-        # For advisor, keep existing program; for admin we could preserve, but we pass None to keep existing
         try:
             update_student(matric, name, cgpa, class_name, self.advisor_id if self.advisor_id else None, None)
         except Exception as e:
@@ -123,7 +110,7 @@ class StudentsTab(QWidget):
                 QMessageBox.warning(self, "Error", "Please select an Academic Advisor.")
                 return
             try:
-                add_student(data['matric'], data['name'], data['cgpa'], data['class'], data['advisor_id'], data['program'])
+                add_student(data['matric'], data['name'], data['cgpa'], data['class'], data['advisor_id'], data['program'], data['current_semester'])
                 self.refresh()
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Add failed: {str(e)}")

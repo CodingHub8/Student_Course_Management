@@ -179,7 +179,7 @@ class EnrollmentsTab(QWidget):
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT CourseCode, CourseName, DefaultSemester, CreditHours, IsKokurikulum
+                    SELECT CourseCode, CourseName, DefaultSemester, CreditHours, CourseGroup
                     FROM Courses
                     WHERE DefaultSemester = %s
                     ORDER BY CourseCode
@@ -196,7 +196,7 @@ class EnrollmentsTab(QWidget):
             if not any(c[0] == fc[0] for c in all_courses):
                 with get_connection() as conn2:
                     with conn2.cursor() as cur2:
-                        cur2.execute("SELECT CourseName, DefaultSemester, CreditHours, IsKokurikulum FROM Courses WHERE CourseCode = %s", (fc[0],))
+                        cur2.execute("SELECT CourseName, DefaultSemester, CreditHours, CourseGroup FROM Courses WHERE CourseCode = %s", (fc[0],))
                         row = cur2.fetchone()
                         if row:
                             all_courses.append((fc[0], row[0], row[1], row[2], row[3], True))  # carry-over flag

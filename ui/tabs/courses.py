@@ -92,6 +92,7 @@ class CoursesTab(QWidget):
         self.scroll_widget = QWidget()
         self.scroll_layout = QVBoxLayout(self.scroll_widget)
         self.scroll_layout.setAlignment(Qt.AlignTop)
+        self.scroll_layout.setContentsMargins(0, 0, 0, 0)
         self.scroll_area.setWidget(self.scroll_widget)
         self.main_layout.addWidget(self.scroll_area)
 
@@ -107,12 +108,12 @@ class CoursesTab(QWidget):
             if widget:
                 widget.deleteLater()
 
-        rows = get_all_courses()  # (code, name, semester, credits, cohort, program, is_kokurikulum)
+        rows = get_all_courses()  # (code, name, semester, credits, cohort, program, course_group)
         sem_dict = {}
         for row in rows:
             if len(row) < 7:
                 continue
-            code, name, sem, cred, cohort, program, is_koku = row[:7]
+            code, name, sem, cred, cohort, program, group = row[:7]
             if sem not in sem_dict:
                 sem_dict[sem] = []
             sem_dict[sem].append({
@@ -121,7 +122,7 @@ class CoursesTab(QWidget):
                 'credits': cred,
                 'cohort': cohort,
                 'program': program,
-                'is_kokurikulum': is_koku,
+                'course_group': group,
                 'prereqs': get_course_prerequisite(code)
             })
 
@@ -141,8 +142,25 @@ class CoursesTab(QWidget):
 
             courses = sem_dict[semester]
             table.setRowCount(len(courses) + 1)
-            total_credits = 0
-            koku_present = any(c['is_kokurikulum'] for c in courses)
+            # Calculate total credits, handling course groups
+            group_credits = {}
+            core_total = 0
+            for course in courses:
+                group = course['course_group']
+                if group is None:
+                    core_total += course['credits']
+                else:
+                    if group not in group_credits:
+                        group_credits[group] = []
+                    group_credits[group].append(course['credits'])
+
+            # For each group, add the max credit (student picks one)
+            group_total = 0
+            for g, credits in group_credits.items():
+                group_total += max(credits)  # assume student takes highest credit option
+
+            total_credits = core_total + group_total
+
             for i, course in enumerate(courses):
                 table.setItem(i, 0, QTableWidgetItem(course['code'].removesuffix("-1")))
                 table.setItem(i, 1, QTableWidgetItem(course['name']))
@@ -151,12 +169,6 @@ class CoursesTab(QWidget):
                 table.setItem(i, 4, QTableWidgetItem(course['program'] if course['program'] else ""))
                 prereq_str = ", ".join(course['prereqs']) if course['prereqs'] else ""
                 table.setItem(i, 5, QTableWidgetItem(prereq_str))
-                # Sum credits: only add if not kokurikulum OR if kokurikulum, we add only 1 if present
-                if not course['is_kokurikulum']:
-                    total_credits += course['credits']
-                # For kokurikulum, we will add 1 at the end if any present
-            if koku_present:
-                total_credits += 1
 
             total_row = len(courses)
             total_name_item = QTableWidgetItem("Total")
@@ -185,6 +197,7 @@ class CoursesTab(QWidget):
 
             group_layout.addWidget(table)
             group_box.setLayout(group_layout)
+            group_box.setMinimumHeight(200)
             self.scroll_layout.addWidget(group_box)
 
             self.tables[semester] = table
@@ -195,6 +208,7 @@ class CoursesTab(QWidget):
             self.scroll_layout.addWidget(label)
 
     def on_cell_changed(self, row, col):
+        # unchanged – same as before
         table = self.sender()
         if not isinstance(table, QTableWidget):
             return
@@ -202,15 +216,11 @@ class CoursesTab(QWidget):
         if semester is None:
             return
 
-        # Total row is read-only, ignore
         if row == table.rowCount() - 1:
             return
-
-        # Prereqs column is read-only (handled by double-click)
         if col == 5:
             return
 
-        # Get course code from first column
         code_item = table.item(row, 0)
         if not code_item:
             return
@@ -230,7 +240,6 @@ class CoursesTab(QWidget):
 
         try:
             update_course(code, name, semester, cred, cohort, program)
-            # Refresh to update totals
             self.refresh()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Update failed: {str(e)}")
@@ -240,14 +249,9 @@ class CoursesTab(QWidget):
         table = self.sender()
         if not isinstance(table, QTableWidget):
             return
-        semester = table.property("semester")
-        if semester is None:
-            return
-
         if row == table.rowCount() - 1:
             return
-
-        if col == 5:  # Prereqs column
+        if col == 5:
             code_item = table.item(row, 0)
             if code_item:
                 course_code = code_item.text()
@@ -272,9 +276,8 @@ class CoursesTab(QWidget):
         if dialog.exec():
             data = dialog.get_data()
             try:
-                # Note: add_course now returns final code
                 final_code = add_course(data['code'], data['name'], data['semester'], data['credits'],
-                           data['cohort'], data['program'], data.get('is_kokurikulum', False))
+                                        data['cohort'], data['program'], data.get('course_group', None))
                 if data['prerequisites']:
                     for prereq in data['prerequisites']:
                         try:
@@ -290,7 +293,6 @@ class CoursesTab(QWidget):
         if not self.selected_course:
             QMessageBox.warning(self, "No selection", "Please click on a course row to select it.")
             return
-
         code = self.selected_course
         reply = QMessageBox.question(self, "Confirm", f"Delete course {code}?",
                                      QMessageBox.Yes | QMessageBox.No)
