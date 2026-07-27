@@ -18,7 +18,7 @@ class LoginDialog(QDialog):
         login_btn = QPushButton("Login")
         login_btn.clicked.connect(self.attempt_login)
 
-        register_btn = QPushButton("Register New Advisor")
+        register_btn = QPushButton("Register")
         register_btn.clicked.connect(self.open_register)
 
         layout.addWidget(QLabel("Enter your credentials:"))

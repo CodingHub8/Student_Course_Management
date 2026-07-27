@@ -189,11 +189,22 @@ class ImportDialog(QDialog):
     def browse_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Select File to Import",
-            "", "All Files (*);;CSV Files (*.csv);;Excel Files (*.xlsx *.xls);;PDF Files (*.pdf);;Text Files (*.txt)"
+            "", "All Supported Files (*.sql *.csv *.xlsx *.xls *.txt);;SQL Backup Files (*.sql);;CSV Files (*.csv);;Excel Files (*.xlsx *.xls);;Text Files (*.txt)"
         )
         if file_path:
             self.file_path = file_path
             self.file_label.setText(os.path.basename(file_path))
+            if file_path.lower().endswith('.sql'):
+                from utils.backup import import_backup
+                try:
+                    import_backup(file_path)
+                    QMessageBox.information(self, "Success", "SQL Backup imported successfully!")
+                    self.accept()
+                    return
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to import SQL backup: {str(e)}")
+                    return
+
             if file_path.lower().endswith(('.xlsx', '.xls')):
                 try:
                     self.sheet_names = get_excel_sheet_names(file_path)

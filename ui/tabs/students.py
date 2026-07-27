@@ -1,6 +1,6 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem, QMessageBox, QHeaderView
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem, QMessageBox, QHeaderView, QApplication
 from PySide6.QtCore import Qt
-from database.models import get_all_students, get_students_by_advisor, add_student, update_student, delete_student
+from database.models import get_all_students, get_students_by_advisor, add_student, update_student, delete_student, sync_all_students_metrics
 from ui.dialogs.add_dialog import AddStudentDialog
 
 class StudentsTab(QWidget):
@@ -34,48 +34,82 @@ class StudentsTab(QWidget):
         self.setLayout(layout)
         self.refresh()
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.refresh()
+
     def refresh(self):
-        self.table.cellChanged.disconnect(self.on_cell_changed)
-        self.table.blockSignals(True)
-        self.table.setRowCount(0)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            QApplication.processEvents()
+            self.table.cellChanged.disconnect(self.on_cell_changed)
+            self.table.blockSignals(True)
+            self.table.setRowCount(0)
 
-        if self.advisor_id:
-            rows = get_students_by_advisor(self.advisor_id)
-            # rows: (matric, name, cgpa, class, total_cred, current_cred, program, current_semester)
-            self.table.setColumnCount(8)
-            self.table.setHorizontalHeaderLabels(["Matric", "Name", "CGPA", "Class", "Total Credits", "Current Credits", "Program", "Current Semester"])
-        else:
-            rows = get_all_students()
-            # rows: (matric, name, cgpa, class, total_cred, current_cred, advisor_name, program, current_semester)
-            self.table.setColumnCount(9)
-            self.table.setHorizontalHeaderLabels(["Matric", "Name", "CGPA", "Class", "Total Credits", "Current Credits", "Advisor", "Program", "Current Semester"])
-
-        self.table.setRowCount(len(rows))
-        for i, row in enumerate(rows):
-            self.table.setItem(i, 0, QTableWidgetItem(row[0] if row[0] else ""))
-            self.table.setItem(i, 1, QTableWidgetItem(row[1] if row[1] else ""))
-            self.table.setItem(i, 2, QTableWidgetItem(str(row[2]) if row[2] is not None else "0.0"))
-            self.table.setItem(i, 3, QTableWidgetItem(row[3] if row[3] else ""))
-            self.table.setItem(i, 4, QTableWidgetItem(str(row[4]) if row[4] is not None else "0"))
-            self.table.setItem(i, 5, QTableWidgetItem(str(row[5]) if row[5] is not None else "0"))
-
+            header = self.table.horizontalHeader()
             if self.advisor_id:
-                # Program at index 6, CurrentSemester at index 7
-                self.table.setItem(i, 6, QTableWidgetItem(row[6] if row[6] else ""))
-                self.table.setItem(i, 7, QTableWidgetItem(str(row[7]) if row[7] is not None else "1"))
+                rows = get_students_by_advisor(self.advisor_id)
+                self.table.setColumnCount(8)
+                self.table.setHorizontalHeaderLabels(["Matric", "Name", "CGPA", "Class", "Total Credits", "Current Semester Credits", "Program", "Current Semester"])
+                header.setSectionResizeMode(0, QHeaderView.Interactive)
+                header.setSectionResizeMode(1, QHeaderView.Stretch)
+                header.setSectionResizeMode(2, QHeaderView.Fixed)
+                header.setSectionResizeMode(3, QHeaderView.Fixed)
+                header.setSectionResizeMode(4, QHeaderView.Interactive)
+                header.setSectionResizeMode(5, QHeaderView.Interactive)
+                header.setSectionResizeMode(6, QHeaderView.Interactive)
+                header.setSectionResizeMode(7, QHeaderView.Fixed)
+                self.table.setColumnWidth(0, 130)
+                self.table.setColumnWidth(2, 60)
+                self.table.setColumnWidth(3, 80)
+                self.table.setColumnWidth(7, 110)
             else:
-                # advisor_name at index 6, program at 7, current_semester at 8
-                self.table.setItem(i, 6, QTableWidgetItem(row[6] if row[6] else "Unassigned"))
-                self.table.setItem(i, 7, QTableWidgetItem(row[7] if row[7] else ""))
-                self.table.setItem(i, 8, QTableWidgetItem(str(row[8]) if row[8] is not None else "1"))
+                rows = get_all_students()
+                self.table.setColumnCount(9)
+                self.table.setHorizontalHeaderLabels(["Matric", "Name", "CGPA", "Class", "Total Credits", "Current Semester Credits", "Advisor", "Program", "Current Semester"])
+                header.setSectionResizeMode(0, QHeaderView.Interactive)
+                header.setSectionResizeMode(1, QHeaderView.Stretch)
+                header.setSectionResizeMode(2, QHeaderView.Fixed)
+                header.setSectionResizeMode(3, QHeaderView.Fixed)
+                header.setSectionResizeMode(4, QHeaderView.Interactive)
+                header.setSectionResizeMode(5, QHeaderView.Interactive)
+                header.setSectionResizeMode(6, QHeaderView.Interactive)
+                header.setSectionResizeMode(7, QHeaderView.Interactive)
+                header.setSectionResizeMode(8, QHeaderView.Fixed)
+                self.table.setColumnWidth(0, 130)
+                self.table.setColumnWidth(2, 60)
+                self.table.setColumnWidth(3, 80)
+                self.table.setColumnWidth(8, 110)
 
-        self.table.blockSignals(False)
-        self.table.resizeColumnsToContents()
-        self.table.cellChanged.connect(self.on_cell_changed)
+            self.table.setRowCount(len(rows))
+            for i, row in enumerate(rows):
+                self.table.setItem(i, 0, QTableWidgetItem(row[0] if row[0] else ""))
+                self.table.setItem(i, 1, QTableWidgetItem(row[1] if row[1] else ""))
+                self.table.setItem(i, 2, QTableWidgetItem(str(row[2]) if row[2] is not None else "0.0"))
+                self.table.setItem(i, 3, QTableWidgetItem(row[3] if row[3] else ""))
+                self.table.setItem(i, 4, QTableWidgetItem(str(row[4]) if row[4] is not None else "0"))
+                self.table.setItem(i, 5, QTableWidgetItem(str(row[5]) if row[5] is not None else "0"))
+
+                if self.advisor_id:
+                    self.table.setItem(i, 6, QTableWidgetItem(row[6] if row[6] else ""))
+                    self.table.setItem(i, 7, QTableWidgetItem(str(row[7]) if row[7] is not None else "1"))
+                else:
+                    self.table.setItem(i, 6, QTableWidgetItem(row[6] if row[6] else "Unassigned"))
+                    self.table.setItem(i, 7, QTableWidgetItem(row[7] if row[7] else ""))
+                    self.table.setItem(i, 8, QTableWidgetItem(str(row[8]) if row[8] is not None else "1"))
+
+            self.table.blockSignals(False)
+            self.table.cellChanged.connect(self.on_cell_changed)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def on_cell_changed(self, row, col):
-        # Allow editing Name, CGPA, Class (cols 1,2,3) and possibly CurrentSemester? For now, only those.
-        if col not in [1,2,3]:
+        # Allowed columns: Name(1), CGPA(2), Class(3), Program(6 for advisor / 7 for admin), CurrentSemester(7 / 8)
+        if self.advisor_id:
+            editable_cols = [1,2,3,6,7]
+        else:
+            editable_cols = [1,2,3,7,8]
+        if col not in editable_cols:
             return
         matric_item = self.table.item(row, 0)
         if not matric_item:
@@ -93,8 +127,20 @@ class StudentsTab(QWidget):
         except ValueError:
             cgpa = 0.0
 
+        # Get program and current_semester based on role
+        if self.advisor_id:
+            program = self.table.item(row, 6).text().strip() if self.table.item(row, 6) else None
+            current_semester_str = self.table.item(row, 7).text().strip() if self.table.item(row, 7) else "1"
+        else:
+            program = self.table.item(row, 7).text().strip() if self.table.item(row, 7) else None
+            current_semester_str = self.table.item(row, 8).text().strip() if self.table.item(row, 8) else "1"
         try:
-            update_student(matric, name, cgpa, class_name, self.advisor_id if self.advisor_id else None, None)
+            current_semester = int(current_semester_str) if current_semester_str else 1
+        except ValueError:
+            current_semester = 1
+
+        try:
+            update_student(matric, name, cgpa, class_name, self.advisor_id if self.advisor_id else None, program, current_semester)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Update failed: {str(e)}")
             self.refresh()

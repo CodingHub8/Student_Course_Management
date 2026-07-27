@@ -32,7 +32,7 @@ def init_database():
                 );
             """)
 
-            # Courses – NO IsKokurikulum
+            # Courses
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS Courses (
                     CourseCode TEXT PRIMARY KEY,
@@ -64,29 +64,9 @@ def init_database():
                     SemesterSession TEXT NOT NULL,
                     AttemptType TEXT DEFAULT 'NORMAL',
                     Grade TEXT,
+                    PassStatus TEXT DEFAULT 'LULUS',
                     UNIQUE(StudentID, CourseCode, SemesterSession, AttemptType)
                 );
             """)
-
-            # Safely add columns if they do not exist
-            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='courses';")
-            course_cols = [row[0] for row in cur.fetchall()]
-            if 'coursegroup' not in course_cols:
-                cur.execute("ALTER TABLE Courses ADD COLUMN CourseGroup TEXT;")
-            # Drop IsKokurikulum if it exists (cleanup)
-            if 'iskokurikulum' in course_cols:
-                cur.execute("ALTER TABLE Courses DROP COLUMN IsKokurikulum;")
-
-            # Add CurrentSemester to Students if missing
-            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='students';")
-            student_cols = [row[0] for row in cur.fetchall()]
-            if 'currentsemester' not in student_cols:
-                cur.execute("ALTER TABLE Students ADD COLUMN CurrentSemester INTEGER DEFAULT 1;")
-
-            # Drop any old unused columns from Users
-            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='users';")
-            user_cols = [row[0] for row in cur.fetchall()]
-            if 'assignedsemester' in user_cols:
-                cur.execute("ALTER TABLE Users DROP COLUMN AssignedSemester;")
 
             conn.commit()

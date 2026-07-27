@@ -1,5 +1,151 @@
 import bcrypt
+import re
 from .connection import get_connection
+
+# ---------- Grade Points ----------
+GRADE_POINTS = {
+    'A+': 4.00,
+    'A': 4.00,
+    'A-': 3.67,
+    'B+': 3.33,
+    'B': 3.00,
+    'B-': 2.67,
+    'C+': 2.33,
+    'C': 2.00,
+    'C-': 1.67,
+    'D+': 1.33,
+    'D': 1.00,
+    'E': 0.67,      # GAGAL
+    'E-': 0.33,     # GAGAL
+    'F': 0.00,      # GAGAL
+    'TANGGUH': None,
+}
+
+# ---------- GPA Calculation ----------
+def compute_gpa(student_id):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT e.CourseCode, e.Grade, c.CreditHours, e.AttemptType, e.ID
+                FROM Enrollments e
+                JOIN Courses c ON e.CourseCode = c.CourseCode
+                WHERE e.StudentID = %s
+                  AND e.Grade IS NOT NULL
+                  AND e.Grade != 'TANGGUH'
+                  AND e.Grade != ''
+                ORDER BY e.ID ASC
+            """, (student_id,))
+            rows = cur.fetchall()
+
+    latest_course_grades = {}
+    for raw_code, grade, cred, attempt, eid in rows:
+        code_clean = clean_course_code(raw_code)
+        gp = GRADE_POINTS.get(grade, 0.0)
+        if gp is None:
+            continue
+        latest_course_grades[code_clean] = (gp, cred)
+
+    total_points = sum(gp * cred for gp, cred in latest_course_grades.values())
+    total_credits = sum(cred for gp, cred in latest_course_grades.values())
+
+    if total_credits == 0:
+        return 0.0
+    return round(total_points / total_credits, 2)
+
+def update_student_cgpa(student_id):
+    cgpa = compute_gpa(student_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE Students SET CurrentCGPA = %s WHERE MatricNo = %s", (cgpa, student_id))
+            conn.commit()
+    return cgpa
+
+# ---------- Semester Credits ----------
+def get_semester_number_from_session(session_str):
+    import re
+    if not session_str:
+        return None
+    match = re.search(r'SEM\s*(\d+)', str(session_str), re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    match_num = re.search(r'(\d+)', str(session_str))
+    if match_num:
+        return int(match_num.group(1))
+    return None
+
+def get_default_session(advisor_id, semester):
+    if advisor_id:
+        cohort = get_user_cohort(advisor_id)
+        if cohort:
+            return f"{cohort}-SEM{semester}"
+    return f"2025/2026-SEM{semester}"
+
+def update_student_current_semester_credits(student_id):
+    current_sem = get_student_current_semester(student_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT e.SemesterSession, c.CreditHours
+                FROM Enrollments e
+                JOIN Courses c ON e.CourseCode = c.CourseCode
+                WHERE e.StudentID = %s
+            """, (student_id,))
+            rows = cur.fetchall()
+    total_credits = 0
+    for session, cred in rows:
+        sem_num = get_semester_number_from_session(session)
+        if sem_num == current_sem:
+            total_credits += cred
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE Students SET CurrentSemesterCredits = %s WHERE MatricNo = %s", (total_credits, student_id))
+            conn.commit()
+    return total_credits
+
+# ---------- Course Cache ----------
+_COURSE_CACHE = None
+
+def get_cached_courses():
+    global _COURSE_CACHE
+    if _COURSE_CACHE is None:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT CourseCode, CourseName, DefaultSemester, CreditHours, CourseGroup FROM Courses")
+                rows = cur.fetchall()
+                cache = {}
+                for r in rows:
+                    raw_code, name, sem, cred, grp = r
+                    clean_c = clean_course_code(raw_code)
+                    cache[clean_c] = (raw_code, name, sem, cred, grp)
+                _COURSE_CACHE = cache
+    return _COURSE_CACHE
+
+# ---------- Total Credits Earned ----------
+def update_student_total_credits(student_id):
+    courses_cache = get_cached_courses()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT e.CourseCode, e.Grade, e.PassStatus
+                FROM Enrollments e
+                WHERE e.StudentID = %s
+                  AND e.Grade IS NOT NULL
+                  AND e.Grade != 'TANGGUH'
+                  AND e.Grade != ''
+            """, (student_id,))
+            passed_courses = {}
+            for raw_code, grade, pass_status in cur.fetchall():
+                clean_code = clean_course_code(raw_code)
+                gp = GRADE_POINTS.get(grade, 0.0)
+                if pass_status == 'LULUS' and gp is not None and gp >= 1.00:
+                    info = courses_cache.get(clean_code)
+                    cred = info[3] if info else 0
+                    passed_courses[clean_code] = cred
+
+            total = sum(passed_courses.values())
+            cur.execute("UPDATE Students SET TotalCreditsEarned = %s WHERE MatricNo = %s", (total, student_id))
+            conn.commit()
+    return total
 
 # ---------- Password Helpers ----------
 def hash_password(password):
@@ -10,6 +156,23 @@ def check_password(password, hashed):
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 # ---------- Users ----------
+def update_user_password(user_identifier, new_password):
+    hashed = hash_password(new_password)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE Users SET Password = %s
+                WHERE UserID = %s OR Username = %s
+            """, (hashed, str(user_identifier), str(user_identifier)))
+            conn.commit()
+    return True
+
+def get_all_users():
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT UserID, FullName, Role, Username, Program FROM Users ORDER BY Role, FullName")
+            return cur.fetchall()
+
 def register_user(ic_number, password, full_name, cohort, program):
     hashed = hash_password(password)
     cohort = cohort.upper() if cohort else None
@@ -65,6 +228,19 @@ def get_user_program(user_id):
             return row[0] if row else None
 
 # ---------- Students ----------
+def sync_all_students_metrics():
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT MatricNo FROM Students")
+                matrics = [row[0] for row in cur.fetchall()]
+        for m in matrics:
+            update_student_cgpa(m)
+            update_student_total_credits(m)
+            update_student_current_semester_credits(m)
+    except Exception:
+        pass
+
 def get_all_students():
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -124,19 +300,6 @@ def delete_student(matric):
             cur.execute("DELETE FROM Students WHERE MatricNo = %s", (matric,))
             conn.commit()
 
-def update_student_total_credits(matric):
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT COALESCE(SUM(c.CreditHours), 0)
-                FROM Enrollments e
-                JOIN Courses c ON e.CourseCode = c.CourseCode
-                WHERE e.StudentID = %s AND e.Grade IN ('A','B','C','D')
-            """, (matric,))
-            total = cur.fetchone()[0]
-            cur.execute("UPDATE Students SET TotalCreditsEarned = %s WHERE MatricNo = %s", (total, matric))
-            conn.commit()
-
 def get_student_cgpa(student_id):
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -152,11 +315,47 @@ def get_student_current_semester(student_id):
             return row[0] if row else 1
 
 # ---------- Courses ----------
+_EXACT_COURSE_CODES = None
+
+def get_all_exact_course_codes():
+    global _EXACT_COURSE_CODES
+    if _EXACT_COURSE_CODES is None:
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT UPPER(CourseCode) FROM Courses")
+                    _EXACT_COURSE_CODES = {row[0] for row in cur.fetchall()}
+        except Exception:
+            _EXACT_COURSE_CODES = set()
+    return _EXACT_COURSE_CODES
+
+def clean_course_code(code):
+    if not code:
+        return ""
+    code_upper = str(code).strip().upper()
+    exact_codes = get_all_exact_course_codes()
+    if code_upper in exact_codes:
+        return code_upper
+    import re
+    return re.sub(r'-\d+$', '', code_upper)
+
 def get_all_courses():
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT CourseCode, CourseName, DefaultSemester, CreditHours, Cohort, Program, CourseGroup FROM Courses ORDER BY DefaultSemester, CourseCode")
             return cur.fetchall()
+
+def get_distinct_course_cohorts():
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT Cohort FROM Courses WHERE Cohort IS NOT NULL AND Cohort != '' ORDER BY Cohort")
+            return [row[0] for row in cur.fetchall()]
+
+def get_distinct_course_programs():
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT DISTINCT Program FROM Courses WHERE Program IS NOT NULL AND Program != '' ORDER BY Program")
+            return [row[0] for row in cur.fetchall()]
 
 def is_placeholder_code(code):
     return 'XX' in code or 'XXXXXX' in code or code.endswith('X')
@@ -228,7 +427,31 @@ def delete_course(code):
             conn.commit()
 
 # ---------- Prerequisites ----------
+_PREREQ_CACHE = None
+
+def get_all_prerequisites_batch(force_refresh=False):
+    global _PREREQ_CACHE
+    if _PREREQ_CACHE is None or force_refresh:
+        try:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT CourseCode, PrereqCode FROM Prerequisites ORDER BY CourseCode, PrereqCode")
+                    cache = {}
+                    for c_code, p_code in cur.fetchall():
+                        clean_c = clean_course_code(c_code)
+                        if clean_c not in cache:
+                            cache[clean_c] = []
+                        cache[clean_c].append(p_code)
+                    _PREREQ_CACHE = cache
+        except Exception:
+            _PREREQ_CACHE = {}
+    return _PREREQ_CACHE
+
 def get_course_prerequisite(course_code):
+    batch = get_all_prerequisites_batch()
+    clean_c = clean_course_code(course_code)
+    if clean_c in batch:
+        return batch[clean_c]
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT PrereqCode FROM Prerequisites WHERE CourseCode = %s ORDER BY PrereqCode", (course_code.upper(),))
@@ -249,12 +472,14 @@ def add_prerequisite(course, prereq):
                 (course.upper(), prereq.upper())
             )
             conn.commit()
+    get_all_prerequisites_batch(force_refresh=True)
 
 def delete_prerequisite(id):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM Prerequisites WHERE ID = %s", (id,))
             conn.commit()
+    get_all_prerequisites_batch(force_refresh=True)
 
 # ---------- Enrollments ----------
 def get_semester_enrollments(semester, advisor_id=None):
@@ -263,7 +488,7 @@ def get_semester_enrollments(semester, advisor_id=None):
             if advisor_id:
                 cur.execute("""
                     SELECT e.ID, e.StudentID, s.Name AS StudentName, e.CourseCode, c.CourseName,
-                           e.SemesterSession, e.AttemptType, e.Grade
+                           e.SemesterSession, e.AttemptType, e.Grade, e.PassStatus
                     FROM Enrollments e
                     JOIN Students s ON e.StudentID = s.MatricNo
                     JOIN Courses c ON e.CourseCode = c.CourseCode
@@ -273,7 +498,7 @@ def get_semester_enrollments(semester, advisor_id=None):
             else:
                 cur.execute("""
                     SELECT e.ID, e.StudentID, s.Name AS StudentName, e.CourseCode, c.CourseName,
-                           e.SemesterSession, e.AttemptType, e.Grade
+                           e.SemesterSession, e.AttemptType, e.Grade, e.PassStatus
                     FROM Enrollments e
                     JOIN Students s ON e.StudentID = s.MatricNo
                     JOIN Courses c ON e.CourseCode = c.CourseCode
@@ -286,7 +511,7 @@ def get_student_enrollments(student_id):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT ID, StudentID, CourseCode, SemesterSession, AttemptType, Grade
+                SELECT ID, StudentID, CourseCode, SemesterSession, AttemptType, Grade, PassStatus
                 FROM Enrollments
                 WHERE StudentID = %s
                 ORDER BY SemesterSession DESC, AttemptType DESC
@@ -297,37 +522,83 @@ def get_failed_courses(student_id):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT CourseCode, AttemptType, Grade
+                SELECT CourseCode, AttemptType, Grade, PassStatus
                 FROM Enrollments
-                WHERE StudentID = %s AND Grade IN ('D', 'F', 'TANGGUH')
+                WHERE StudentID = %s AND PassStatus = 'GAGAL'
                 ORDER BY SemesterSession DESC
             """, (student_id,))
             return cur.fetchall()
 
-def add_enrollment(student_id, course_code, semester_session, attempt_type, grade):
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO Enrollments (StudentID, CourseCode, SemesterSession, AttemptType, Grade)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (student_id, course_code.upper(), semester_session, attempt_type, grade))
-            conn.commit()
+def _determine_pass_status(grade):
+    """Return 'GAGAL' for fail grades, 'TANGGUH' for TANGGUH, 'LULUS' for passing grades, else None for In Progress."""
+    if grade in ('E', 'E-', 'F'):
+        return 'GAGAL'
+    elif grade == 'TANGGUH':
+        return 'TANGGUH'
+    elif grade is not None and grade != '' and grade != 'In Progress':
+        return 'LULUS'
+    return None
 
-def update_enrollment(id, grade, attempt_type, semester_session):
+def add_enrollment(student_id, course_code, semester_session, attempt_type, grade, pass_status=None):
+    # Auto-set pass_status based on grade if not explicitly provided
+    if pass_status is None and grade is not None:
+        pass_status = _determine_pass_status(grade)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                UPDATE Enrollments
-                SET Grade = %s, AttemptType = %s, SemesterSession = %s
-                WHERE ID = %s
-            """, (grade, attempt_type, semester_session, id))
+                INSERT INTO Enrollments (StudentID, CourseCode, SemesterSession, AttemptType, Grade, PassStatus)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (student_id, course_code.upper(), semester_session, attempt_type, grade, pass_status))
             conn.commit()
+    update_student_cgpa(student_id)
+    update_student_total_credits(student_id)
+    update_student_current_semester_credits(student_id)
+
+def update_enrollment(id, grade, attempt_type, semester_session, pass_status=None):
+    # Auto-set pass_status based on grade
+    auto_status = _determine_pass_status(grade)
+    if auto_status:
+        pass_status = auto_status
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT StudentID FROM Enrollments WHERE ID = %s", (id,))
+            row = cur.fetchone()
+            student_id = row[0] if row else None
+    if not student_id:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            if pass_status is not None:
+                cur.execute("""
+                    UPDATE Enrollments
+                    SET Grade = %s, AttemptType = %s, SemesterSession = %s, PassStatus = %s
+                    WHERE ID = %s
+                """, (grade, attempt_type, semester_session, pass_status, id))
+            else:
+                cur.execute("""
+                    UPDATE Enrollments
+                    SET Grade = %s, AttemptType = %s, SemesterSession = %s
+                    WHERE ID = %s
+                """, (grade, attempt_type, semester_session, id))
+            conn.commit()
+    update_student_cgpa(student_id)
+    update_student_total_credits(student_id)
+    update_student_current_semester_credits(student_id)
 
 def delete_enrollment(id):
     with get_connection() as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT StudentID FROM Enrollments WHERE ID = %s", (id,))
+            row = cur.fetchone()
+            student_id = row[0] if row else None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
             cur.execute("DELETE FROM Enrollments WHERE ID = %s", (id,))
             conn.commit()
+    if student_id:
+        update_student_cgpa(student_id)
+        update_student_total_credits(student_id)
+        update_student_current_semester_credits(student_id)
 
 def get_students_by_advisor_for_dropdown(advisor_id):
     with get_connection() as conn:
@@ -352,7 +623,7 @@ def get_student_future_courses(student_id, current_semester):
     failed_codes = {f[0] for f in failed}
 
     enrollments = get_student_enrollments(student_id)
-    passed_codes = {e[2] for e in enrollments if e[5] in ('A','B','C')}
+    passed_codes = {e[2] for e in enrollments if e[6] == 'LULUS'}
     taken_codes = {e[2] for e in enrollments}
 
     with get_connection() as conn:

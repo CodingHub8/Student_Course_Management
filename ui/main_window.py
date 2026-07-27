@@ -24,8 +24,14 @@ class MainWindow(QMainWindow):
         exit_action = file_menu.addAction("Exit")
         exit_action.triggered.connect(self.close)
 
+        is_admin = bool(self.role and str(self.role).lower() in ('admin', 'system administrator'))
+        if is_admin:
+            admin_menu = menubar.addMenu("Admin")
+            change_pw_action = admin_menu.addAction("Change User Password")
+            change_pw_action.triggered.connect(self.open_change_password_dialog)
+
         self.tabs = QTabWidget()
-        advisor_id = self.user_id if self.role == 'Academic Advisor' else None
+        advisor_id = None if is_admin else self.user_id
 
         self.students_tab = StudentsTab(advisor_id=advisor_id, user_id=self.user_id, role=self.role, user_program=program)
         self.enroll_tab = EnrollmentsTab(advisor_id=advisor_id)
@@ -46,11 +52,27 @@ class MainWindow(QMainWindow):
             self.courses_tab.refresh()
 
     def export_backup(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save Backup", "", "SQL files (*.sql)")
+        from utils.export_import import export_to_csv, export_to_xlsx, export_to_pdf, export_to_docx
+        file_path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export Data",
+            "student_records",
+            "PDF Report (*.pdf);;CSV Spreadsheet (*.csv);;Excel Workbook (*.xlsx);;Word Document (*.docx);;SQL Database Backup (*.sql)"
+        )
         if file_path:
             try:
-                export_backup(file_path)
-                QMessageBox.information(self, "Success", f"Backup saved to {file_path}")
+                ext = file_path.split('.')[-1].lower()
+                if ext == 'csv':
+                    export_to_csv(file_path)
+                elif ext == 'xlsx':
+                    export_to_xlsx(file_path)
+                elif ext == 'pdf':
+                    export_to_pdf(file_path)
+                elif ext == 'docx':
+                    export_to_docx(file_path)
+                else:
+                    export_backup(file_path)
+                QMessageBox.information(self, "Success", f"Data exported successfully to {file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Export failed: {str(e)}")
 
@@ -68,3 +90,8 @@ class MainWindow(QMainWindow):
                     self.courses_tab.refresh()
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"Import failed: {str(e)}")
+
+    def open_change_password_dialog(self):
+        from ui.dialogs.change_password_dialog import ChangePasswordDialog
+        dialog = ChangePasswordDialog(self)
+        dialog.exec()

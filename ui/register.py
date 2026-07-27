@@ -12,9 +12,9 @@ class RegisterDialog(QDialog):
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("Full Name")
         self.ic_edit = QLineEdit()
-        self.ic_edit.setPlaceholderText("e.g., 850101101234")
+        self.ic_edit.setPlaceholderText("e.g., 010203010203")
         self.cohort_edit = QLineEdit()
-        self.cohort_edit.setPlaceholderText("e.g., DEE2A")
+        self.cohort_edit.setPlaceholderText("e.g., SESI 1 2025/2026")
         self.program_combo = QComboBox()
         self.program_combo.addItems(["DEE", "DDT", "DET", "Other"])  # Add more as needed
 

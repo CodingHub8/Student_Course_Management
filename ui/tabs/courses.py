@@ -1,16 +1,18 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QTableWidget, QTableWidgetItem, QMessageBox, QHeaderView,
-                               QDialog, QListWidget, QScrollArea, QGroupBox, QLabel)
+                               QDialog, QListWidget, QListWidgetItem, QScrollArea, QGroupBox, QLabel, QApplication,
+                               QComboBox)
 from PySide6.QtCore import Qt
 from database.models import (get_all_courses, add_course, update_course, delete_course,
-                             get_course_prerequisite, add_prerequisite, delete_prerequisite, get_prereq_id)
+                             get_course_prerequisite, add_prerequisite, delete_prerequisite, get_prereq_id,
+                             clean_course_code, get_distinct_course_cohorts, get_distinct_course_programs)
 from ui.dialogs.add_dialog import AddCourseDialog
 
 class ManagePrereqDialog(QDialog):
     def __init__(self, course_code, parent=None):
         super().__init__(parent)
         self.course_code = course_code
-        self.setWindowTitle(f"Manage Prerequisites for {course_code}")
+        self.setWindowTitle(f"Manage Prerequisites for {clean_course_code(course_code)}")
         self.setFixedSize(400, 300)
         layout = QVBoxLayout()
         self.list_widget = QListWidget()
@@ -33,7 +35,9 @@ class ManagePrereqDialog(QDialog):
         self.list_widget.clear()
         prereqs = get_course_prerequisite(self.course_code)
         for p in prereqs:
-            self.list_widget.addItem(p)
+            item = QListWidgetItem(clean_course_code(p))
+            item.setData(Qt.UserRole, p)
+            self.list_widget.addItem(item)
 
     def add_prereq(self):
         from ui.dialogs.add_dialog import AddPrereqDialog
@@ -51,7 +55,8 @@ class ManagePrereqDialog(QDialog):
         if selected < 0:
             QMessageBox.warning(self, "No selection", "Select a prerequisite to remove.")
             return
-        prereq_code = self.list_widget.item(selected).text()
+        item = self.list_widget.item(selected)
+        prereq_code = item.data(Qt.UserRole) if item and item.data(Qt.UserRole) else item.text()
         prereq_id = get_prereq_id(self.course_code, prereq_code)
         if prereq_id:
             try:
@@ -74,6 +79,23 @@ class CoursesTab(QWidget):
 
         self.main_layout = QVBoxLayout()
 
+        is_admin = bool(self.role and str(self.role).lower() in ('admin', 'system administrator'))
+
+        if is_admin:
+            filter_layout = QHBoxLayout()
+            filter_layout.addWidget(QLabel("Kohort:"))
+            self.cohort_combo = QComboBox()
+            self.cohort_combo.currentIndexChanged.connect(self.refresh)
+            filter_layout.addWidget(self.cohort_combo)
+
+            filter_layout.addWidget(QLabel("Program:"))
+            self.program_combo = QComboBox()
+            self.program_combo.currentIndexChanged.connect(self.refresh)
+            filter_layout.addWidget(self.program_combo)
+
+            filter_layout.addStretch()
+            self.main_layout.addLayout(filter_layout)
+
         btn_layout = QHBoxLayout()
         self.add_btn = QPushButton("➕ Add Course")
         self.add_btn.clicked.connect(self.add_row)
@@ -81,10 +103,16 @@ class CoursesTab(QWidget):
         self.delete_btn.clicked.connect(self.delete_row)
         self.refresh_btn = QPushButton("🔄 Refresh")
         self.refresh_btn.clicked.connect(self.refresh)
+
         btn_layout.addWidget(self.add_btn)
         btn_layout.addWidget(self.delete_btn)
         btn_layout.addWidget(self.refresh_btn)
         btn_layout.addStretch()
+
+        if not is_admin:
+            self.add_btn.setVisible(False)
+            self.delete_btn.setVisible(False)
+
         self.main_layout.addLayout(btn_layout)
 
         self.scroll_area = QScrollArea()
@@ -101,114 +129,182 @@ class CoursesTab(QWidget):
         self.tables = {}
         self.refresh()
 
+    def update_filter_dropdowns(self):
+        if not hasattr(self, 'cohort_combo') or not hasattr(self, 'program_combo'):
+            return
+
+        current_cohort = self.cohort_combo.currentText()
+        current_prog = self.program_combo.currentText()
+
+        cohorts = get_distinct_course_cohorts()
+        programs = get_distinct_course_programs()
+
+        self.cohort_combo.blockSignals(True)
+        self.program_combo.blockSignals(True)
+
+        self.cohort_combo.clear()
+        self.cohort_combo.addItem("ALL")
+        for c in cohorts:
+            self.cohort_combo.addItem(c)
+
+        idx = self.cohort_combo.findText(current_cohort)
+        if idx >= 0:
+            self.cohort_combo.setCurrentIndex(idx)
+        else:
+            self.cohort_combo.setCurrentIndex(0)
+
+        self.program_combo.clear()
+        self.program_combo.addItem("ALL")
+        for p in programs:
+            self.program_combo.addItem(p)
+
+        idx = self.program_combo.findText(current_prog)
+        if idx >= 0:
+            self.program_combo.setCurrentIndex(idx)
+        else:
+            self.program_combo.setCurrentIndex(0)
+
+        self.cohort_combo.blockSignals(False)
+        self.program_combo.blockSignals(False)
+
     def refresh(self):
-        self.tables.clear()
-        for i in reversed(range(self.scroll_layout.count())):
-            widget = self.scroll_layout.itemAt(i).widget()
-            if widget:
-                widget.deleteLater()
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            QApplication.processEvents()
+            self.update_filter_dropdowns()
+            self.tables.clear()
+            for i in reversed(range(self.scroll_layout.count())):
+                widget = self.scroll_layout.itemAt(i).widget()
+                if widget:
+                    widget.deleteLater()
 
-        rows = get_all_courses()  # (code, name, semester, credits, cohort, program, course_group)
-        sem_dict = {}
-        for row in rows:
-            if len(row) < 7:
-                continue
-            code, name, sem, cred, cohort, program, group = row[:7]
-            if sem not in sem_dict:
-                sem_dict[sem] = []
-            sem_dict[sem].append({
-                'code': code,
-                'name': name,
-                'credits': cred,
-                'cohort': cohort,
-                'program': program,
-                'course_group': group,
-                'prereqs': get_course_prerequisite(code)
-            })
+            sel_cohort = self.cohort_combo.currentText() if hasattr(self, 'cohort_combo') else "ALL"
+            sel_program = self.program_combo.currentText() if hasattr(self, 'program_combo') else "ALL"
 
-        for semester in sorted(sem_dict.keys()):
-            group_box = QGroupBox(f"Semester {semester}")
-            group_layout = QVBoxLayout()
+            rows = get_all_courses()
+            sem_dict = {}
+            for row in rows:
+                if len(row) < 7:
+                    continue
+                code, name, sem, cred, cohort, program, group = row[:7]
 
-            table = QTableWidget()
-            table.setEditTriggers(QTableWidget.DoubleClicked | QTableWidget.EditKeyPressed)
-            table.setSortingEnabled(True)
-            table.setColumnCount(6)
-            table.setHorizontalHeaderLabels(["Code", "Name", "Credits", "Cohort", "Program", "Prerequisites"])
-            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            table.setProperty("semester", semester)
+                if sel_cohort != "ALL" and cohort and cohort != sel_cohort:
+                    continue
+                if sel_program != "ALL" and program and program != sel_program:
+                    continue
 
-            table.blockSignals(True)
+                if sem not in sem_dict:
+                    sem_dict[sem] = []
+                sem_dict[sem].append({
+                    'code': code,
+                    'name': name,
+                    'credits': cred,
+                    'cohort': cohort,
+                    'program': program,
+                    'course_group': group,
+                    'prereqs': get_course_prerequisite(code)
+                })
 
-            courses = sem_dict[semester]
-            table.setRowCount(len(courses) + 1)
-            # Calculate total credits, handling course groups
-            group_credits = {}
-            core_total = 0
-            for course in courses:
-                group = course['course_group']
-                if group is None:
-                    core_total += course['credits']
+            for semester in sorted(sem_dict.keys()):
+                group_box = QGroupBox(f"Semester {semester}")
+                group_layout = QVBoxLayout()
+
+                table = QTableWidget()
+                is_admin = bool(self.role and str(self.role).lower() in ('admin', 'system administrator'))
+                if is_admin:
+                    table.setEditTriggers(QTableWidget.DoubleClicked | QTableWidget.EditKeyPressed)
                 else:
-                    if group not in group_credits:
-                        group_credits[group] = []
-                    group_credits[group].append(course['credits'])
+                    table.setEditTriggers(QTableWidget.NoEditTriggers)
+                table.setSortingEnabled(True)
+                table.setColumnCount(6)
+                table.setHorizontalHeaderLabels(["Code", "Name", "Credits", "Cohort", "Program", "Prerequisites"])
+                header = table.horizontalHeader()
+                header.setSectionResizeMode(0, QHeaderView.Interactive)
+                header.setSectionResizeMode(1, QHeaderView.Stretch)
+                header.setSectionResizeMode(2, QHeaderView.Fixed)
+                header.setSectionResizeMode(3, QHeaderView.Interactive)
+                header.setSectionResizeMode(4, QHeaderView.Interactive)
+                header.setSectionResizeMode(5, QHeaderView.Interactive)
+                table.setColumnWidth(0, 100)
+                table.setColumnWidth(2, 60)
+                table.setColumnWidth(3, 90)
+                table.setColumnWidth(4, 90)
+                table.setColumnWidth(5, 140)
+                table.setProperty("semester", semester)
 
-            # For each group, add the max credit (student picks one)
-            group_total = 0
-            for g, credits in group_credits.items():
-                group_total += max(credits)  # assume student takes highest credit option
+                table.blockSignals(True)
 
-            total_credits = core_total + group_total
+                courses = sem_dict[semester]
+                table.setRowCount(len(courses) + 1)
+                group_credits = {}
+                core_total = 0
+                for course in courses:
+                    group = course['course_group']
+                    if group is None:
+                        core_total += course['credits']
+                    else:
+                        if group not in group_credits:
+                            group_credits[group] = []
+                        group_credits[group].append(course['credits'])
 
-            for i, course in enumerate(courses):
-                table.setItem(i, 0, QTableWidgetItem(course['code'].removesuffix("-1")))
-                table.setItem(i, 1, QTableWidgetItem(course['name']))
-                table.setItem(i, 2, QTableWidgetItem(str(course['credits'])))
-                table.setItem(i, 3, QTableWidgetItem(course['cohort'] if course['cohort'] else ""))
-                table.setItem(i, 4, QTableWidgetItem(course['program'] if course['program'] else ""))
-                prereq_str = ", ".join(course['prereqs']) if course['prereqs'] else ""
-                table.setItem(i, 5, QTableWidgetItem(prereq_str))
+                group_total = 0
+                for g, credits in group_credits.items():
+                    group_total += max(credits)
 
-            total_row = len(courses)
-            total_name_item = QTableWidgetItem("Total")
-            total_name_item.setFlags(Qt.ItemIsEnabled)
-            table.setItem(total_row, 1, total_name_item)
+                total_credits = core_total + group_total
 
-            total_cred_item = QTableWidgetItem(str(total_credits))
-            total_cred_item.setFlags(Qt.ItemIsEnabled)
-            table.setItem(total_row, 2, total_cred_item)
+                for i, course in enumerate(courses):
+                    code_item = QTableWidgetItem(clean_course_code(course['code']))
+                    code_item.setData(Qt.UserRole, course['code'])
+                    table.setItem(i, 0, code_item)
+                    
+                    table.setItem(i, 1, QTableWidgetItem(course['name']))
+                    table.setItem(i, 2, QTableWidgetItem(str(course['credits'])))
+                    table.setItem(i, 3, QTableWidgetItem(course['cohort'] if course['cohort'] else ""))
+                    table.setItem(i, 4, QTableWidgetItem(course['program'] if course['program'] else ""))
+                    prereq_str = ", ".join([clean_course_code(p) for p in course['prereqs']]) if course['prereqs'] else ""
+                    table.setItem(i, 5, QTableWidgetItem(prereq_str))
 
-            for col in [0, 3, 4, 5]:
-                item = QTableWidgetItem("")
-                item.setFlags(Qt.ItemIsEnabled)
-                table.setItem(total_row, col, item)
+                total_row = len(courses)
+                total_name_item = QTableWidgetItem("Total")
+                total_name_item.setFlags(Qt.ItemIsEnabled)
+                table.setItem(total_row, 1, total_name_item)
 
-            for col in range(table.columnCount()):
-                item = table.item(total_row, col)
-                if item:
-                    item.setBackground(Qt.lightGray)
+                total_cred_item = QTableWidgetItem(str(total_credits))
+                total_cred_item.setFlags(Qt.ItemIsEnabled)
+                table.setItem(total_row, 2, total_cred_item)
 
-            table.blockSignals(False)
+                for col in [0, 3, 4, 5]:
+                    item = QTableWidgetItem("")
+                    item.setFlags(Qt.ItemIsEnabled)
+                    table.setItem(total_row, col, item)
 
-            table.cellChanged.connect(self.on_cell_changed)
-            table.cellDoubleClicked.connect(self.on_cell_double_clicked)
-            table.itemClicked.connect(self.on_item_clicked)
+                for col in range(table.columnCount()):
+                    item = table.item(total_row, col)
+                    if item:
+                        item.setBackground(Qt.lightGray)
 
-            group_layout.addWidget(table)
-            group_box.setLayout(group_layout)
-            group_box.setMinimumHeight(200)
-            self.scroll_layout.addWidget(group_box)
+                table.blockSignals(False)
 
-            self.tables[semester] = table
+                table.cellChanged.connect(self.on_cell_changed)
+                table.cellDoubleClicked.connect(self.on_cell_double_clicked)
+                table.itemClicked.connect(self.on_item_clicked)
 
-        if not self.tables:
-            label = QLabel("No courses found. Add a course to get started.")
-            label.setAlignment(Qt.AlignCenter)
-            self.scroll_layout.addWidget(label)
+                group_layout.addWidget(table)
+                group_box.setLayout(group_layout)
+                group_box.setMinimumHeight(200)
+                self.scroll_layout.addWidget(group_box)
+
+                self.tables[semester] = table
+
+            if not self.tables:
+                label = QLabel("No courses found. Add a course to get started.")
+                label.setAlignment(Qt.AlignCenter)
+                self.scroll_layout.addWidget(label)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def on_cell_changed(self, row, col):
-        # unchanged – same as before
         table = self.sender()
         if not isinstance(table, QTableWidget):
             return
@@ -224,7 +320,7 @@ class CoursesTab(QWidget):
         code_item = table.item(row, 0)
         if not code_item:
             return
-        code = code_item.text().strip()
+        code = code_item.data(Qt.UserRole) if code_item and code_item.data(Qt.UserRole) else code_item.text().strip()
         if not code:
             return
 
@@ -252,9 +348,12 @@ class CoursesTab(QWidget):
         if row == table.rowCount() - 1:
             return
         if col == 5:
+            is_admin = bool(self.role and str(self.role).lower() in ('admin', 'system administrator'))
+            if not is_admin:
+                return
             code_item = table.item(row, 0)
             if code_item:
-                course_code = code_item.text()
+                course_code = code_item.data(Qt.UserRole) if code_item and code_item.data(Qt.UserRole) else code_item.text()
                 dialog = ManagePrereqDialog(course_code, self)
                 dialog.exec()
                 self.refresh()
@@ -268,7 +367,7 @@ class CoursesTab(QWidget):
             return
         code_item = table.item(row, 0)
         if code_item:
-            self.selected_course = code_item.text()
+            self.selected_course = code_item.data(Qt.UserRole) if code_item and code_item.data(Qt.UserRole) else code_item.text()
 
     def add_row(self):
         dialog = AddCourseDialog(current_user_id=self.user_id, current_role=self.role,
