@@ -232,14 +232,69 @@ def sync_all_students_metrics():
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT MatricNo FROM Students")
-                matrics = [row[0] for row in cur.fetchall()]
-        for m in matrics:
-            update_student_cgpa(m)
-            update_student_total_credits(m)
-            update_student_current_semester_credits(m)
-    except Exception:
-        pass
+                cur.execute("SELECT MatricNo, CurrentSemester FROM Students")
+                students = {row[0]: row[1] for row in cur.fetchall()}
+                if not students:
+                    return
+
+                cur.execute("""
+                    SELECT e.StudentID, e.CourseCode, e.Grade, e.PassStatus, e.SemesterSession, c.CreditHours
+                    FROM Enrollments e
+                    JOIN Courses c ON e.CourseCode = c.CourseCode
+                    ORDER BY e.StudentID, e.ID ASC
+                """)
+                enrollments = cur.fetchall()
+
+                # Group enrollments by student
+                student_enrollments = {m: [] for m in students}
+                for row in enrollments:
+                    sid = row[0]
+                    if sid in student_enrollments:
+                        student_enrollments[sid].append(row)
+
+                update_params = []
+                for student_id, current_sem in students.items():
+                    rows = student_enrollments[student_id]
+                    
+                    # 1. CGPA
+                    latest_course_grades = {}
+                    # 2. Total Credits Earned
+                    passed_courses = {}
+                    # 3. Current Semester Credits
+                    current_sem_credits = 0
+
+                    for sid, raw_code, grade, pass_status, session, cred in rows:
+                        clean_code = clean_course_code(raw_code)
+                        
+                        if grade and grade != 'TANGGUH' and grade != '':
+                            gp = GRADE_POINTS.get(grade, 0.0)
+                            if gp is not None:
+                                latest_course_grades[clean_code] = (gp, cred)
+                                if pass_status == 'LULUS' and gp >= 1.00:
+                                    passed_courses[clean_code] = cred
+
+                        sem_num = get_semester_number_from_session(session)
+                        if sem_num == current_sem:
+                            current_sem_credits += cred
+
+                    # Compute CGPA
+                    total_points = sum(gp * cred for gp, cred in latest_course_grades.values())
+                    total_credits = sum(cred for gp, cred in latest_course_grades.values())
+                    cgpa = round(total_points / total_credits, 2) if total_credits > 0 else 0.0
+
+                    total_earned = sum(passed_courses.values())
+
+                    update_params.append((cgpa, total_earned, current_sem_credits, student_id))
+
+                if update_params:
+                    cur.executemany("""
+                        UPDATE Students
+                        SET CurrentCGPA = %s, TotalCreditsEarned = %s, CurrentSemesterCredits = %s
+                        WHERE MatricNo = %s
+                    """, update_params)
+                    conn.commit()
+    except Exception as e:
+        print(f"Error in sync_all_students_metrics: {e}")
 
 def get_all_students():
     with get_connection() as conn:

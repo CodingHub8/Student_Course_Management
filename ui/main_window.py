@@ -3,6 +3,7 @@ from ui.tabs.enrollments import EnrollmentsTab
 from ui.tabs.courses import CoursesTab
 from ui.tabs.students import StudentsTab
 from utils.backup import export_backup, import_backup
+from utils.resource import get_app_icon
 
 class MainWindow(QMainWindow):
     def __init__(self, user_id, role, cohort, program):
@@ -12,6 +13,7 @@ class MainWindow(QMainWindow):
         self.cohort = cohort
         self.program = program
         self.setWindowTitle("Student Planner – Academic Advisor System")
+        self.setWindowIcon(get_app_icon())
         self.setGeometry(100, 100, 1200, 700)
 
         menubar = self.menuBar()

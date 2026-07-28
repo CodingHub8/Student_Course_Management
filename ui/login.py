@@ -1,11 +1,13 @@
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QPushButton, QLabel, QMessageBox
 from database.models import validate_user
 from ui.register import RegisterDialog
+from utils.resource import get_app_icon
 
 class LoginDialog(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Login")
+        self.setWindowIcon(get_app_icon())
         self.setFixedSize(300, 200)
 
         layout = QVBoxLayout()

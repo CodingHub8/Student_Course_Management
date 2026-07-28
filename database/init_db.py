@@ -69,4 +69,10 @@ def init_database():
                 );
             """)
 
+            # Indexes for performance
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_enrollments_student ON Enrollments(StudentID);")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_enrollments_course ON Enrollments(CourseCode);")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_students_advisor ON Students(AdvisorID);")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_enrollments_semsession ON Enrollments(SemesterSession);")
+
             conn.commit()
