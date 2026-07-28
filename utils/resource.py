@@ -9,10 +9,13 @@ def get_resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 def get_app_icon():
-    ico_path = get_resource_path("Logo_Politeknik_Malaysia.ico")
+    ico_path = get_resource_path("Logo Politeknik Malaysia.ico")
     if os.path.exists(ico_path):
         return QIcon(ico_path)
     png_path = get_resource_path("Logo Politeknik Malaysia.png")
     if os.path.exists(png_path):
         return QIcon(png_path)
+    und_ico = get_resource_path("Logo_Politeknik_Malaysia.ico")
+    if os.path.exists(und_ico):
+        return QIcon(und_ico)
     return QIcon()
