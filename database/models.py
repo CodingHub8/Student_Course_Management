@@ -596,8 +596,13 @@ def _determine_pass_status(grade):
 
 def add_enrollment(student_id, course_code, semester_session, attempt_type, grade, pass_status=None):
     # Auto-set pass_status based on grade if not explicitly provided
-    if pass_status is None and grade is not None:
+    if grade in ('E', 'E-', 'F'):
+        pass_status = 'GAGAL'
+    elif grade == 'TANGGUH':
+        pass_status = 'TANGGUH'
+    elif not pass_status and grade is not None and grade != '' and grade != 'In Progress':
         pass_status = _determine_pass_status(grade)
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -610,10 +615,13 @@ def add_enrollment(student_id, course_code, semester_session, attempt_type, grad
     update_student_current_semester_credits(student_id)
 
 def update_enrollment(id, grade, attempt_type, semester_session, pass_status=None):
-    # Auto-set pass_status based on grade
-    auto_status = _determine_pass_status(grade)
-    if auto_status:
-        pass_status = auto_status
+    if grade in ('E', 'E-', 'F'):
+        pass_status = 'GAGAL'
+    elif grade == 'TANGGUH':
+        pass_status = 'TANGGUH'
+    elif not pass_status and grade is not None and grade != '' and grade != 'In Progress':
+        pass_status = _determine_pass_status(grade)
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT StudentID FROM Enrollments WHERE ID = %s", (id,))

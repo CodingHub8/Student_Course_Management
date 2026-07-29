@@ -96,6 +96,31 @@ class EnrollmentEditDialog(QDialog):
                 if item:
                     item.setEnabled(False)
 
+        # Enforce Semester-Specific Attempt Type Restrictions:
+        # Semester 1: Disable C1 and C2 (no repeated attempt in 1st semester)
+        # Semester 2: Disable C2 (no 2nd attempt in 2nd semester)
+        # Semester 3+: Enable all attempt types
+        def set_attempt_enabled(text, enabled):
+            for i in range(self.attempt_combo.count()):
+                if self.attempt_combo.itemText(i) == text:
+                    item = self.attempt_combo.model().item(i) if self.attempt_combo.model() else None
+                    if item:
+                        item.setEnabled(enabled)
+
+        if self.current_semester == 1:
+            set_attempt_enabled("C1", False)
+            set_attempt_enabled("C2", False)
+            if self.attempt_combo.currentText() in ("C1", "C2"):
+                self.attempt_combo.setCurrentText("NORMAL")
+        elif self.current_semester == 2:
+            set_attempt_enabled("C1", True)
+            set_attempt_enabled("C2", False)
+            if self.attempt_combo.currentText() == "C2":
+                self.attempt_combo.setCurrentText("NORMAL")
+        else:
+            set_attempt_enabled("C1", True)
+            set_attempt_enabled("C2", True)
+
         form.addRow("Attempt Type:", self.attempt_combo)
 
         # Grade dropdown with dynamic Pass Status behavior
@@ -176,7 +201,7 @@ class EnrollmentEditDialog(QDialog):
 
     def get_data(self):
         grade_val = self.grade_combo.currentData()
-        pass_val = self.pass_combo.currentText().strip() if self.pass_combo.isVisible() and grade_val is not None else None
+        pass_val = self.pass_combo.currentText().strip() if not self.pass_combo.isHidden() and grade_val is not None and grade_val != 'In Progress' else None
         return {
             'session': self.session_edit.text().strip(),
             'attempt': self.attempt_combo.currentText(),
@@ -420,7 +445,7 @@ class EnrollmentsTab(QWidget):
 
                 if info:
                     enrolled = True
-                    disabled = True
+                    disabled = False
                     status = format_enrollment_status(info['pass_status'], info['grade'], info['attempt'])
                 else:
                     enrolled = False
@@ -453,8 +478,8 @@ class EnrollmentsTab(QWidget):
                 if s_num == self.current_semester:
                     current_sem_enrolled_codes.add(clean_course_code(e[2]))
 
-            # Extra courses: unpassed prior courses + failed retakes + actively enrolled courses
-            extra_codes = (unpassed_prior_courses | failed_codes | current_sem_enrolled_codes) - current_clean_codes
+            # Extra courses: failed retakes + actively enrolled courses in current semester
+            extra_codes = (failed_codes | current_sem_enrolled_codes) - current_clean_codes
 
             courses_cache = get_cached_courses()
             for code_clean in sorted(extra_codes):
@@ -478,7 +503,7 @@ class EnrollmentsTab(QWidget):
 
                 if info:
                     enrolled = True
-                    disabled = True
+                    disabled = False
                     status = format_enrollment_status(info['pass_status'], info['grade'], info['attempt'])
                 else:
                     enrolled = False
@@ -521,31 +546,33 @@ class EnrollmentsTab(QWidget):
                         r['disabled'] = True
                         r['status'] = "Kumpulan Subjek Telah Dipilih"
 
-            rows.sort(key=lambda x: (not x['is_carry'], clean_course_code(x['code'])))
+            rows.sort(key=lambda x: (not x.get('is_carry', False), clean_course_code(x['code'])))
 
-            self.table.setRowCount(len(rows))
             self._updating_checkbox = True
-            for i, row in enumerate(rows):
+            self.table.setRowCount(len(rows))
+            for i, r in enumerate(rows):
                 cb = QCheckBox()
-                cb.setChecked(row['enrolled'])
-                cb.setEnabled(not row['disabled'])
+                cb.setChecked(r['enrolled'])
+                cb.setEnabled(not r['disabled'])
                 cb.clicked.connect(lambda checked, row_idx=i: self.on_checkbox_clicked(row_idx))
                 self.table.setCellWidget(i, 0, cb)
-
-                code_item = QTableWidgetItem(clean_course_code(row['code']))
-                code_item.setData(Qt.UserRole, row['code'])
+                
+                code_item = QTableWidgetItem(clean_course_code(r['code']))
+                code_item.setData(Qt.UserRole, r['code'])
+                if r.get('enrollment_id'):
+                    code_item.setData(Qt.UserRole + 1, r['enrollment_id'])
                 self.table.setItem(i, 1, code_item)
-
-                self.table.setItem(i, 2, QTableWidgetItem(row['name']))
-                self.table.setItem(i, 3, QTableWidgetItem(str(row['credits'])))
-
-                prereqs = get_course_prerequisite(row['code'])
+                
+                self.table.setItem(i, 2, QTableWidgetItem(r['name']))
+                self.table.setItem(i, 3, QTableWidgetItem(str(r['credits'])))
+                
+                prereqs = get_course_prerequisite(r['code'])
                 prereq_str = ", ".join([clean_course_code(p) for p in prereqs])
                 self.table.setItem(i, 4, QTableWidgetItem(prereq_str))
-                self.table.setItem(i, 5, QTableWidgetItem(row['status']))
+                self.table.setItem(i, 5, QTableWidgetItem(r['status']))
             self._updating_checkbox = False
 
-            # Update Study Plan Summarization View
+            # Summary view...
             self.update_summary_and_study_plan(enrollments, all_passed_codes, failed_codes, current_courses)
         finally:
             QApplication.restoreOverrideCursor()
@@ -655,7 +682,39 @@ class EnrollmentsTab(QWidget):
         cb = self.table.cellWidget(row, 0)
         if not isinstance(cb, QCheckBox) or not cb.isEnabled():
             return
-        self.edit_enrollment_at_row(row)
+
+        code_item = self.table.item(row, 1)
+        course_code = code_item.data(Qt.UserRole) if code_item and code_item.data(Qt.UserRole) else code_item.text()
+        course_name = self.table.item(row, 2).text()
+        enrollment_id = code_item.data(Qt.UserRole + 1) if code_item else None
+
+        if not enrollment_id:
+            enrollments = get_student_enrollments(self.current_student)
+            for e in enrollments:
+                sem_num = get_semester_number_from_session(e[3])
+                if clean_course_code(e[2]) == clean_course_code(course_code) and sem_num == self.current_semester:
+                    enrollment_id = e[0]
+                    break
+
+        if not cb.isChecked():
+            # User un-checked the box!
+            if enrollment_id:
+                reply = QMessageBox.question(
+                    self,
+                    "Gugurkan Subjek (Drop Course)",
+                    f"Adakah anda pasti untuk menggugurkan (uncheck) pendaftaran subjek {clean_course_code(course_code)} - {course_name}?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                if reply == QMessageBox.Yes:
+                    try:
+                        delete_enrollment(enrollment_id)
+                    except Exception as ex:
+                        QMessageBox.critical(self, "Error", f"Gagal menggugurkan subjek: {str(ex)}")
+            self.refresh()
+        else:
+            # User checked the box
+            self.edit_enrollment_at_row(row)
 
     def on_cell_double_clicked(self, row, column):
         status_item = self.table.item(row, 5)
@@ -666,7 +725,7 @@ class EnrollmentsTab(QWidget):
 
     def edit_enrollment_at_row(self, row):
         code_item = self.table.item(row, 1)
-        course_code = code_item.data(Qt.UserRole) if code_item and code_item.data(Qt.UserRole) else code_item.text()
+        course_code = code_item.text()
         course_name = self.table.item(row, 2).text()
 
         existing = None
@@ -685,6 +744,9 @@ class EnrollmentsTab(QWidget):
 
         dialog = EnrollmentEditDialog(self.current_student, course_code, course_name, self.current_semester, self.advisor_id, existing, self)
         if dialog.exec() == QDialog.Accepted:
+            if getattr(dialog, 'was_dropped', False):
+                self.refresh()
+                return
             data = dialog.get_data()
             try:
                 if existing:
@@ -701,10 +763,8 @@ class EnrollmentsTab(QWidget):
     def on_context_menu(self, pos: QPoint):
         row = self.table.rowAt(pos.y())
         if row < 0:
-            return
-        course_code = self.table.item(row, 1).text()
-        status_item = self.table.item(row, 5)
-        status_text = status_item.text() if status_item else ""
+            status_item = self.table.item(row, 5)
+            status_text = status_item.text() if status_item else ""
 
         if status_text == "Not Enrolled" or status_text.startswith("Gagal - Ulang"):
             QMessageBox.information(self, "Info", "Student is not enrolled in this course.")

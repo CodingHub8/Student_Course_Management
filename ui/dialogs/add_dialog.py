@@ -108,7 +108,7 @@ class AddEnrollmentDialog(QDialog):
 
     def get_data(self):
         grade = self.grade_combo.currentData()
-        pass_status = self.pass_combo.currentText().strip() if self.pass_combo.isVisible() and grade is not None else None
+        pass_status = self.pass_combo.currentText().strip() if not self.pass_combo.isHidden() and grade is not None and grade != 'In Progress' else None
         return {
             'student_id': self.student_combo.currentData(),
             'course_code': self.course_combo.currentData(),
