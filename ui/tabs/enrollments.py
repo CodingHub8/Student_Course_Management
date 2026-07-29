@@ -398,7 +398,6 @@ class EnrollmentsTab(QWidget):
                         SELECT CourseCode, DefaultSemester, CourseGroup FROM Courses WHERE DefaultSemester < %s
                     """, (self.current_semester,))
                     prior_course_rows = cur.fetchall()
-
             # Group courses by (DefaultSemester, CourseGroup)
             # Find groups that have at least one course passed in prior semesters
             satisfied_group_keys = set()
@@ -408,16 +407,35 @@ class EnrollmentsTab(QWidget):
                     if clean_c in all_passed_codes:
                         satisfied_group_keys.add((sem, grp.strip().upper()))
 
-            prior_courses_filtered = set()
-            for code, sem, grp in prior_course_rows:
+            # Identify prior courses (DefaultSemester < current_semester) that were prerequisite-blocked in earlier semesters, but are now satisfied prior to current_semester
+            newly_unlocked_codes = set()
+            for code, def_sem, grp in prior_course_rows:
                 clean_c = clean_course_code(code)
-                grp_key = (sem, grp.strip().upper()) if grp else None
-                # If course belongs to a satisfied group, skip carrying it over
+                if clean_c in all_passed_codes:
+                    continue
+
+                grp_key = (def_sem, grp.strip().upper()) if grp else None
                 if grp_key and grp_key in satisfied_group_keys:
                     continue
-                prior_courses_filtered.add(clean_c)
 
-            unpassed_prior_courses = prior_courses_filtered - all_passed_codes
+                prereqs = get_course_prerequisite(code)
+                if not prereqs:
+                    continue
+
+                prereqs_passed_now = all(clean_course_code(p) in prior_passed_codes for p in prereqs)
+                if not prereqs_passed_now:
+                    continue
+
+                prior_to_def_sem_passed = set()
+                for e in enrollments:
+                    if e[6] == 'LULUS' and e[5] and GRADE_POINTS.get(e[5], -1) >= 1.00:
+                        s_num = get_semester_number_from_session(e[3])
+                        if s_num and s_num < def_sem:
+                            prior_to_def_sem_passed.add(clean_course_code(e[2]))
+
+                was_blocked_in_def_sem = any(clean_course_code(p) not in prior_to_def_sem_passed for p in prereqs)
+                if was_blocked_in_def_sem:
+                    newly_unlocked_codes.add(clean_c)
 
             # Build rows for current semester default courses
             rows = []
@@ -478,8 +496,8 @@ class EnrollmentsTab(QWidget):
                 if s_num == self.current_semester:
                     current_sem_enrolled_codes.add(clean_course_code(e[2]))
 
-            # Extra courses: failed retakes + actively enrolled courses in current semester
-            extra_codes = (failed_codes | current_sem_enrolled_codes) - current_clean_codes
+            # Extra courses: failed retakes + newly unlocked prior courses + actively enrolled courses in current semester
+            extra_codes = (failed_codes | newly_unlocked_codes | current_sem_enrolled_codes) - current_clean_codes
 
             courses_cache = get_cached_courses()
             for code_clean in sorted(extra_codes):
