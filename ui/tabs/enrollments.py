@@ -67,10 +67,11 @@ class EnrollmentEditDialog(QDialog):
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        SELECT COUNT(*) FROM Enrollments
-                        WHERE StudentID = %s AND CourseCode = %s AND PassStatus = 'GAGAL'
-                    """, (self.student_id, self.course_code))
-                    fail_count = cur.fetchone()[0]
+                        SELECT CourseCode FROM Enrollments
+                        WHERE StudentID = %s AND PassStatus = 'GAGAL'
+                    """, (self.student_id,))
+                    clean_target = clean_course_code(self.course_code)
+                    fail_count = sum(1 for (c_code,) in cur.fetchall() if clean_course_code(c_code) == clean_target)
         except Exception:
             pass
 
@@ -115,11 +116,18 @@ class EnrollmentEditDialog(QDialog):
         elif self.current_semester == 2:
             set_attempt_enabled("C1", True)
             set_attempt_enabled("C2", False)
-            if self.attempt_combo.currentText() == "C2":
+            if fail_count >= 1:
+                set_attempt_enabled("NORMAL", False)
+                self.attempt_combo.setCurrentText("C1")
+            elif self.attempt_combo.currentText() == "C2":
                 self.attempt_combo.setCurrentText("NORMAL")
         else:
             set_attempt_enabled("C1", True)
             set_attempt_enabled("C2", True)
+            if fail_count == 1:
+                self.attempt_combo.setCurrentText("C1")
+            elif fail_count >= 2:
+                self.attempt_combo.setCurrentText("C2")
 
         form.addRow("Attempt Type:", self.attempt_combo)
 
@@ -376,6 +384,9 @@ class EnrollmentsTab(QWidget):
                     'pass_status': e[6]
                 }
 
+            def get_enrollment_info(code_c, view_s):
+                return enrollment_map.get((code_c, view_s))
+
             # Identify passed courses
             all_passed_codes = set()
             prior_passed_codes = set()
@@ -445,8 +456,7 @@ class EnrollmentsTab(QWidget):
                 code, name, sem, cred, group = course
                 clean_code = clean_course_code(code)
                 current_clean_codes.add(clean_code)
-                key = (clean_code, self.current_semester)
-                info = enrollment_map.get(key)
+                info = get_enrollment_info(clean_code, self.current_semester)
 
                 # Check prerequisites: MUST be passed in a semester PRIOR to current_semester
                 prereqs = get_course_prerequisite(code)
@@ -507,8 +517,7 @@ class EnrollmentsTab(QWidget):
                 else:
                     raw_code, name, cred = code_clean, code_clean, 0
 
-                key = (code_clean, self.current_semester)
-                info = enrollment_map.get(key)
+                info = get_enrollment_info(code_clean, self.current_semester)
                 enrolled = info is not None
                 disabled = False
 
@@ -759,6 +768,7 @@ class EnrollmentsTab(QWidget):
                     'pass_status': e[6]
                 }
                 break
+
 
         dialog = EnrollmentEditDialog(self.current_student, course_code, course_name, self.current_semester, self.advisor_id, existing, self)
         if dialog.exec() == QDialog.Accepted:
