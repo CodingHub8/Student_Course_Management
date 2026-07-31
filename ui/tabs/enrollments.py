@@ -57,7 +57,7 @@ class EnrollmentEditDialog(QDialog):
         else:
             default_sess = get_default_session(self.advisor_id, self.current_semester)
             self.session_edit.setText(default_sess)
-        form.addRow("Sesi / Semester Session:", self.session_edit)
+        form.addRow("Intake Session / Semester Session:", self.session_edit)
 
         self.attempt_combo = QCombo()
         self.attempt_combo.addItems(["NORMAL", "C1", "C2", "TANGGUH"])

@@ -21,54 +21,31 @@ GRADE_POINTS = {
     'TANGGUH': None,
 }
 
-# ---------- GPA Calculation ----------
-def compute_gpa(student_id):
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT e.CourseCode, e.Grade, c.CreditHours, e.AttemptType, e.ID
-                FROM Enrollments e
-                JOIN Courses c ON e.CourseCode = c.CourseCode
-                WHERE e.StudentID = %s
-                  AND e.Grade IS NOT NULL
-                  AND e.Grade != 'TANGGUH'
-                  AND e.Grade != ''
-                ORDER BY e.ID ASC
-            """, (student_id,))
-            rows = cur.fetchall()
-
-    latest_course_grades = {}
-    for raw_code, grade, cred, attempt, eid in rows:
-        code_clean = clean_course_code(raw_code)
-        gp = GRADE_POINTS.get(grade, 0.0)
-        if gp is None:
-            continue
-        latest_course_grades[code_clean] = (gp, cred)
-
-    total_points = sum(gp * cred for gp, cred in latest_course_grades.values())
-    total_credits = sum(cred for gp, cred in latest_course_grades.values())
-
-    if total_credits == 0:
-        return 0.0
-    return round(total_points / total_credits, 2)
-
-def update_student_cgpa(student_id):
-    cgpa = compute_gpa(student_id)
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("UPDATE Students SET CurrentCGPA = %s WHERE MatricNo = %s", (cgpa, student_id))
-            conn.commit()
-    return cgpa
-
-# ---------- Semester Credits ----------
-def get_semester_number_from_session(session_str):
-    import re
-    if not session_str:
-        return None
-    match = re.search(r'SEM\s*(\d+)', str(session_str), re.IGNORECASE)
+# ---------- Course Credit & Semester Helpers ----------
+def get_course_credit_hours(course_code, courses_cache=None):
+    if not course_code:
+        return 0
+    clean_c = clean_course_code(course_code)
+    if courses_cache and clean_c in courses_cache:
+        cred = courses_cache[clean_c][3]
+        if cred and cred > 0:
+            return cred
+    match = re.search(r'(\d)(?:-[0-9]+)?$', str(course_code).strip())
     if match:
         return int(match.group(1))
-    match_num = re.search(r'(\d+)', str(session_str))
+    return 0
+
+def get_semester_number_from_session(session_str):
+    if not session_str:
+        return None
+    s_str = str(session_str).strip()
+    match = re.search(r'(?:SEM|SEMESTER)\s*([1-8])\b', s_str, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    match_sesi = re.search(r'SESI\s*([1-8])\b', s_str, re.IGNORECASE)
+    if match_sesi:
+        return int(match_sesi.group(1))
+    match_num = re.search(r'(?<!\d)([1-8])(?!\d)', s_str)
     if match_num:
         return int(match_num.group(1))
     return None
@@ -79,28 +56,6 @@ def get_default_session(advisor_id, semester):
         if cohort:
             return f"{cohort}-SEM{semester}"
     return f"2025/2026-SEM{semester}"
-
-def update_student_current_semester_credits(student_id):
-    current_sem = get_student_current_semester(student_id)
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT e.SemesterSession, c.CreditHours
-                FROM Enrollments e
-                JOIN Courses c ON e.CourseCode = c.CourseCode
-                WHERE e.StudentID = %s
-            """, (student_id,))
-            rows = cur.fetchall()
-    total_credits = 0
-    for session, cred in rows:
-        sem_num = get_semester_number_from_session(session)
-        if sem_num == current_sem:
-            total_credits += cred
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("UPDATE Students SET CurrentSemesterCredits = %s WHERE MatricNo = %s", (total_credits, student_id))
-            conn.commit()
-    return total_credits
 
 # ---------- Course Cache ----------
 _COURSE_CACHE = None
@@ -120,32 +75,106 @@ def get_cached_courses():
                 _COURSE_CACHE = cache
     return _COURSE_CACHE
 
-# ---------- Total Credits Earned ----------
-def update_student_total_credits(student_id):
+# ---------- Student Metrics Calculation (CGPA, Total Credits, Semester Credits) ----------
+def compute_student_metrics(student_id):
+    current_sem = get_student_current_semester(student_id)
     courses_cache = get_cached_courses()
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT e.CourseCode, e.Grade, e.PassStatus
+                SELECT e.CourseCode, e.Grade, e.PassStatus, e.SemesterSession, c.CreditHours, c.DefaultSemester
                 FROM Enrollments e
+                LEFT JOIN Courses c ON e.CourseCode = c.CourseCode
                 WHERE e.StudentID = %s
-                  AND e.Grade IS NOT NULL
-                  AND e.Grade != 'TANGGUH'
-                  AND e.Grade != ''
+                ORDER BY e.ID ASC
             """, (student_id,))
-            passed_courses = {}
-            for raw_code, grade, pass_status in cur.fetchall():
-                clean_code = clean_course_code(raw_code)
-                gp = GRADE_POINTS.get(grade, 0.0)
-                if pass_status == 'LULUS' and gp is not None and gp >= 1.00:
-                    info = courses_cache.get(clean_code)
-                    cred = info[3] if info else 0
-                    passed_courses[clean_code] = cred
+            rows = cur.fetchall()
 
-            total = sum(passed_courses.values())
-            cur.execute("UPDATE Students SET TotalCreditsEarned = %s WHERE MatricNo = %s", (total, student_id))
+    latest_course_grades = {}
+    passed_courses = {}
+    current_sem_credits = 0
+
+    for raw_code, grade, pass_status, session, db_cred, def_sem in rows:
+        clean_code = clean_course_code(raw_code)
+        cred = db_cred if (db_cred and db_cred > 0) else get_course_credit_hours(raw_code, courses_cache)
+
+        grade_str = str(grade).strip().upper() if grade else ""
+        pass_str = str(pass_status).strip().upper() if pass_status else ""
+
+        if grade_str == 'TANGGUH' or pass_str == 'TANGGUH' or grade_str == 'IN PROGRESS':
+            pass
+        else:
+            gp = None
+            if pass_str == 'GAGAL' or grade_str in ('E', 'E-', 'F', 'GAGAL'):
+                if grade_str == 'E':
+                    gp = 0.67
+                elif grade_str == 'E-':
+                    gp = 0.33
+                else:
+                    gp = 0.00
+            elif grade_str in GRADE_POINTS:
+                gp = GRADE_POINTS[grade_str]
+
+            if gp is not None and cred > 0:
+                latest_course_grades[clean_code] = (gp, cred)
+
+            if (pass_str == 'LULUS' or (gp is not None and gp >= 1.00 and pass_str != 'GAGAL')) and cred > 0:
+                passed_courses[clean_code] = cred
+
+        sem_num = get_semester_number_from_session(session)
+        if sem_num is None and def_sem is not None:
+            sem_num = def_sem
+
+        if sem_num == current_sem and cred > 0:
+            current_sem_credits += cred
+
+    total_points = sum(gp * c for gp, c in latest_course_grades.values())
+    total_credits = sum(c for gp, c in latest_course_grades.values())
+    cgpa = round(total_points / total_credits, 2) if total_credits > 0 else 0.0
+    total_earned = sum(passed_courses.values())
+
+    return cgpa, total_earned, current_sem_credits
+
+def compute_gpa(student_id):
+    cgpa, _, _ = compute_student_metrics(student_id)
+    return cgpa
+
+def update_student_cgpa(student_id):
+    cgpa, total_earned, current_sem_credits = compute_student_metrics(student_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE Students
+                SET CurrentCGPA = %s, TotalCreditsEarned = %s, CurrentSemesterCredits = %s
+                WHERE MatricNo = %s
+            """, (cgpa, total_earned, current_sem_credits, student_id))
             conn.commit()
-    return total
+    return cgpa
+
+def update_student_current_semester_credits(student_id):
+    cgpa, total_earned, current_sem_credits = compute_student_metrics(student_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE Students
+                SET CurrentCGPA = %s, TotalCreditsEarned = %s, CurrentSemesterCredits = %s
+                WHERE MatricNo = %s
+            """, (cgpa, total_earned, current_sem_credits, student_id))
+            conn.commit()
+    return current_sem_credits
+
+def update_student_total_credits(student_id):
+    cgpa, total_earned, current_sem_credits = compute_student_metrics(student_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE Students
+                SET CurrentCGPA = %s, TotalCreditsEarned = %s, CurrentSemesterCredits = %s
+                WHERE MatricNo = %s
+            """, (cgpa, total_earned, current_sem_credits, student_id))
+            conn.commit()
+    return total_earned
 
 # ---------- Password Helpers ----------
 def hash_password(password):
@@ -232,61 +261,19 @@ def sync_all_students_metrics():
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT MatricNo, CurrentSemester FROM Students")
-                students = {row[0]: row[1] for row in cur.fetchall()}
-                if not students:
+                cur.execute("SELECT MatricNo FROM Students")
+                mno_rows = cur.fetchall()
+                if not mno_rows:
                     return
+                students = [row[0] for row in mno_rows]
 
-                cur.execute("""
-                    SELECT e.StudentID, e.CourseCode, e.Grade, e.PassStatus, e.SemesterSession, c.CreditHours
-                    FROM Enrollments e
-                    JOIN Courses c ON e.CourseCode = c.CourseCode
-                    ORDER BY e.StudentID, e.ID ASC
-                """)
-                enrollments = cur.fetchall()
+            update_params = []
+            for student_id in students:
+                cgpa, total_earned, current_sem_credits = compute_student_metrics(student_id)
+                update_params.append((cgpa, total_earned, current_sem_credits, student_id))
 
-                # Group enrollments by student
-                student_enrollments = {m: [] for m in students}
-                for row in enrollments:
-                    sid = row[0]
-                    if sid in student_enrollments:
-                        student_enrollments[sid].append(row)
-
-                update_params = []
-                for student_id, current_sem in students.items():
-                    rows = student_enrollments[student_id]
-                    
-                    # 1. CGPA
-                    latest_course_grades = {}
-                    # 2. Total Credits Earned
-                    passed_courses = {}
-                    # 3. Current Semester Credits
-                    current_sem_credits = 0
-
-                    for sid, raw_code, grade, pass_status, session, cred in rows:
-                        clean_code = clean_course_code(raw_code)
-                        
-                        if grade and grade != 'TANGGUH' and grade != '':
-                            gp = GRADE_POINTS.get(grade, 0.0)
-                            if gp is not None:
-                                latest_course_grades[clean_code] = (gp, cred)
-                                if pass_status == 'LULUS' and gp >= 1.00:
-                                    passed_courses[clean_code] = cred
-
-                        sem_num = get_semester_number_from_session(session)
-                        if sem_num == current_sem:
-                            current_sem_credits += cred
-
-                    # Compute CGPA
-                    total_points = sum(gp * cred for gp, cred in latest_course_grades.values())
-                    total_credits = sum(cred for gp, cred in latest_course_grades.values())
-                    cgpa = round(total_points / total_credits, 2) if total_credits > 0 else 0.0
-
-                    total_earned = sum(passed_courses.values())
-
-                    update_params.append((cgpa, total_earned, current_sem_credits, student_id))
-
-                if update_params:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
                     cur.executemany("""
                         UPDATE Students
                         SET CurrentCGPA = %s, TotalCreditsEarned = %s, CurrentSemesterCredits = %s

@@ -42,6 +42,7 @@ class StudentsTab(QWidget):
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
             QApplication.processEvents()
+            sync_all_students_metrics()
             self.table.cellChanged.disconnect(self.on_cell_changed)
             self.table.blockSignals(True)
             self.table.setRowCount(0)
