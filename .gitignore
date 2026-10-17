@@ -1,0 +1,77 @@
+# ===== SENSITIVE CONFIG =====
+config.ini
+
+# ===== PYTHON =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# ===== VIRTUAL ENVIRONMENTS =====
+venv/
+env/
+.env
+.venv
+ENV/
+env.bak/
+venv.bak/
+
+# ===== IDE / EDITOR =====
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ===== DATA FILES (PDFs, Excel, etc.) =====
+*.pdf
+*.xlsx
+*.xls
+*.csv
+
+# ===== SQL FILES =====
+SQL Files/
+*.sql
+
+# ===== NODE / FRONTEND BUILD =====
+node_modules/
+package-lock.json
+package.json
+dist/
+.next/
+.nuxt/
+.cache/
+
+# ===== OS FILES =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== LOGS =====
+*.log
+*.out
+
+# ===== BACKUPS =====
+backups/
+*.bak
+
+# ===== PYINSTALLER =====
+*.spec
+build/
+dist/

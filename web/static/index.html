@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Politeknik Student Course Management | Academic Advisor System</title>
+  <meta name="description" content="Official Academic Advisor and Student Course Management System for Politeknik Malaysia. Track student CGPA, prerequisites, course plans, retakes, and credit loads.">
+  <link rel="icon" type="image/png" href="/static/images/logo.png">
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+  <!-- ================= AUTH OVERLAY (LOGIN & REGISTRATION) ================= -->
+  <div id="auth-overlay" class="auth-wrapper" style="display: flex;">
+    <div class="auth-card">
+      <img src="/static/images/logo.png" alt="Politeknik Malaysia Logo" class="auth-logo">
+      <h2 class="auth-title">Politeknik Malaysia</h2>
+      <p class="auth-desc">Academic Advisor & Course Management System</p>
+
+      <!-- Login Form -->
+      <form id="login-form">
+        <div class="form-group" style="text-align: left; margin-bottom: 1rem;">
+          <label class="form-label" for="login-ic">IC Number / Staff ID</label>
+          <input type="text" id="login-ic" class="input" placeholder="e.g. 850101-08-1234 or ADM01" required autocomplete="username">
+        </div>
+
+        <div class="form-group" style="text-align: left; margin-bottom: 1.5rem;">
+          <label class="form-label" for="login-password">Password</label>
+          <input type="password" id="login-password" class="input" placeholder="Enter your password" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;">
+          Sign In
+        </button>
+
+        <div style="font-size: 0.82rem; color: var(--text-muted);">
+          New Academic Advisor? 
+          <a href="#" onclick="openModal('register-modal'); return false;" style="color: var(--accent-blue); text-decoration: none; font-weight: 600;">
+            Register Account
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= REGISTRATION MODAL ================= -->
+  <div id="register-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">📝 Register New Academic Advisor</h3>
+        <button class="btn-icon" onclick="closeModal('register-modal')">&times;</button>
+      </div>
+      <form id="register-form">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="reg-ic">IC Number (Username)</label>
+            <input type="text" id="reg-ic" class="input" placeholder="e.g. 900512-08-5678" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reg-name">Full Name</label>
+            <input type="text" id="reg-name" class="input" placeholder="e.g. Ts. Ahmad Zaki bin Mansor" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reg-password">Password</label>
+            <input type="password" id="reg-password" class="input" placeholder="Create a strong password" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reg-program">Department / Program</label>
+            <input type="text" id="reg-program" class="input" placeholder="e.g. DEE, DEP, DKM">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reg-cohort">Cohort / Intake</label>
+            <input type="text" id="reg-cohort" class="input" placeholder="e.g. 2025/2026">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('register-modal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Advisor Account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ================= MAIN APPLICATION SHELL ================= -->
+  <div id="app-shell" class="app-container" style="display: none; min-height: 100vh; flex-direction: column;">
+    
+    <!-- Top Navigation Header -->
+    <header class="navbar">
+      <div class="nav-left">
+        <button id="menu-toggle-btn" class="menu-toggle-btn" aria-label="Toggle Navigation Drawer">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <img src="/static/images/logo.png" alt="Politeknik Malaysia Logo" class="brand-logo">
+        <div class="brand-text">
+          <h1>Politeknik Malaysia</h1>
+          <div class="brand-subtitle">
+            <span>Sistem Pengurusan Kursus & Penasihat Akademik</span>
+            <span class="badge-pill">Sesi 2025/2026</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-right">
+        <button id="sync-metrics-btn" class="btn btn-secondary btn-sm" onclick="triggerSyncMetrics()" title="Recompute and synchronize all student CGPA and credit totals">
+          ⚡ Sync Metrics
+        </button>
+        
+        <button id="theme-toggle-btn" class="btn btn-secondary btn-sm" title="Toggle Dark/Light Mode">
+          ☀️
+        </button>
+
+        <div class="user-profile-chip">
+          <div id="nav-user-avatar" class="user-avatar">AD</div>
+          <div class="user-info-text">
+            <span id="nav-user-name" class="user-name">Advisor</span>
+            <span id="nav-user-role" class="user-role-badge">Academic Advisor</span>
+          </div>
+        </div>
+
+        <button id="logout-btn" class="btn btn-secondary btn-sm" title="Sign Out">
+          🚪 Logout
+        </button>
+      </div>
+    </header>
+
+    <!-- Application Body (Sidebar + Views) -->
+    <div class="app-body">
+      
+      <!-- Backdrop Overlay for Mobile Drawer -->
+      <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+      <!-- Left Navigation Sidebar -->
+      <aside class="sidebar" id="app-sidebar">
+        <div class="sidebar-header-mobile">
+          <div style="display: flex; align-items: center; gap: 0.6rem;">
+            <img src="/static/images/logo.png" alt="Politeknik Logo" style="height: 28px; width: auto;">
+            <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-primary);">Navigation</span>
+          </div>
+          <button id="close-drawer-btn" class="btn-icon" aria-label="Close Navigation Drawer" style="font-size: 1.4rem; padding: 0.2rem 0.5rem;">&times;</button>
+        </div>
+        <a class="nav-link active" data-tab="dashboard" id="nav-dash-link">
+          <span class="nav-icon">📊</span>
+          <span>Dashboard</span>
+        </a>
+        <a class="nav-link" data-tab="students" id="nav-students-link">
+          <span class="nav-icon">👨‍🎓</span>
+          <span>Students Directory</span>
+        </a>
+        <a class="nav-link" data-tab="planner" id="nav-planner-link">
+          <span class="nav-icon">🎯</span>
+          <span>Academic Planner</span>
+        </a>
+        <a class="nav-link" data-tab="enrollments" id="nav-enrollments-link">
+          <span class="nav-icon">📝</span>
+          <span>Enrollments</span>
+        </a>
+        <a class="nav-link" data-tab="courses" id="nav-courses-link">
+          <span class="nav-icon">📚</span>
+          <span>Course Catalog</span>
+        </a>
+        <div class="sidebar-divider"></div>
+        <a class="nav-link" data-tab="import-export" id="nav-import-link">
+          <span class="nav-icon">📥</span>
+          <span>Import & Export</span>
+        </a>
+      </aside>
+
+      <!-- Main Content Views -->
+      <main class="main-content">
+        
+        <!-- ================= TAB: DASHBOARD ================= -->
+        <section id="view-dashboard" class="tab-view">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Academic Overview & Insights</h2>
+              <p class="card-subtitle">Real-time academic performance summary and student progression tracking</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openAddStudentModal()">
+              ➕ Add New Student
+            </button>
+          </div>
+
+          <!-- Stats Grid -->
+          <div class="metrics-grid">
+            <div class="stat-card">
+              <div class="stat-icon blue">👨‍🎓</div>
+              <div class="stat-info">
+                <span class="stat-label">Total Students</span>
+                <span id="dash-total-students" class="stat-value">0</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon teal">📈</div>
+              <div class="stat-info">
+                <span class="stat-label">Pass Rate</span>
+                <span id="dash-pass-rate" class="stat-value">0.0%</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon purple">🎓</div>
+              <div class="stat-info">
+                <span class="stat-label">Average CGPA</span>
+                <span id="dash-avg-cgpa" class="stat-value">0.00</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon amber">⚠️</div>
+              <div class="stat-info">
+                <span class="stat-label">At Risk (CGPA &lt; 2.2)</span>
+                <span id="dash-critical-students" class="stat-value">0</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon teal">💼</div>
+              <div class="stat-info">
+                <span class="stat-label">Internship Ready</span>
+                <span id="dash-internship-ready" class="stat-value">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Access Students Table -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Students Academic Snapshot</h3>
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('students')">View All Students &rarr;</button>
+            </div>
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Matric No</th>
+                    <th>Student Name</th>
+                    <th>Class</th>
+                    <th>Program</th>
+                    <th>Current CGPA</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="dash-students-tbody">
+                  <!-- Populated by JavaScript -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB: STUDENTS ================= -->
+        <section id="view-students" class="tab-view" style="display: none;">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Students Directory</h2>
+              <p class="card-subtitle">Manage student records, track cumulative grade points, and monitor credit loads</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn-secondary btn-sm" onclick="triggerExport('csv')">📄 Export CSV</button>
+              <button class="btn btn-secondary btn-sm" onclick="triggerExport('xlsx')">📊 Export Excel</button>
+              <button class="btn btn-primary btn-sm" onclick="openAddStudentModal()">➕ Add Student</button>
+            </div>
+          </div>
+
+          <!-- Search & Filter Controls -->
+          <div class="action-bar">
+            <div class="search-filter-group">
+              <input type="text" id="search-students" class="input" placeholder="🔍 Search by Matric, Name, or Class..." style="width: 280px;">
+              <select id="filter-student-program" class="select">
+                <option value="">All Programs</option>
+              </select>
+              <select id="filter-student-advisor" class="select">
+                <option value="">All Advisors</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Students Table -->
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Matric No</th>
+                  <th>Student Name</th>
+                  <th>CGPA</th>
+                  <th>Class</th>
+                  <th>Total Credits</th>
+                  <th>Current Sem Credits</th>
+                  <th>Semester</th>
+                  <th>Program</th>
+                  <th>Academic Advisor</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="students-tbody">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ================= TAB: ACADEMIC PLANNER ================= -->
+        <section id="view-planner" class="tab-view" style="display: none;">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Academic Advisor & Course Planner</h2>
+              <p class="card-subtitle">Intelligent semester course recommendation engine adhering to Politeknik credit policies and prerequisite rules</p>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <label for="planner-student-select" style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">Select Student:</label>
+              <select id="planner-student-select" class="select" style="min-width: 260px;">
+                <!-- Populated by JS -->
+              </select>
+            </div>
+          </div>
+
+          <div id="planner-loader" style="display: none; text-align: center; padding: 3rem;">
+            <p style="color: var(--text-muted);">Analyzing student course history and computing recommendations...</p>
+          </div>
+
+          <div id="planner-details-view" class="planner-grid">
+            
+            <!-- Left Column: Student Spotlight & Credit Limits -->
+            <div class="student-spotlight-card">
+              <div class="spotlight-header">
+                <div class="spotlight-avatar">🎓</div>
+                <div class="spotlight-title">
+                  <h3 id="spotlight-name">-</h3>
+                  <p id="spotlight-matric">-</p>
+                  <p id="spotlight-prog-sem" style="margin-top: 0.2rem;">-</p>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                <div id="spotlight-cgpa-badge"></div>
+                <div id="spotlight-internship-badge"></div>
+              </div>
+
+              <!-- Credit Hour Gauge -->
+              <div class="credit-gauge-container">
+                <div class="gauge-header">
+                  <span style="font-weight: 600;">Semester Credit Hours</span>
+                  <span id="gauge-current-val" style="font-weight: 700; color: var(--accent-blue);">0 hrs</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div id="planner-gauge-fill" class="progress-bar-fill" style="width: 0%;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
+                  <span>0 hrs</span>
+                  <span id="gauge-max-val">Max: 18 hrs</span>
+                </div>
+              </div>
+
+              <!-- Policy Rule Callout -->
+              <div id="planner-rule-explainer" class="rule-box">
+                <!-- Explains CGPA rules dynamically -->
+              </div>
+
+              <!-- Important Retake Warning Section -->
+              <div id="retakes-section" style="margin-top: 1.25rem; display: none;">
+                <h4 style="font-size: 0.9rem; color: var(--status-danger); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+                  <span>⚠️</span> Priority Retakes (Failed Courses)
+                </h4>
+                <div id="retakes-list">
+                  <!-- List of failed courses -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Course Recommendations & History -->
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+              
+              <!-- Future Course Recommendations -->
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <h3 class="card-title">📋 Recommended Courses for Next Semester</h3>
+                    <p class="card-subtitle">Courses filtered against prerequisites and eligibility criteria</p>
+                  </div>
+                </div>
+
+                <div class="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Course Code</th>
+                        <th>Course Title</th>
+                        <th>Default Sem</th>
+                        <th>Credits</th>
+                        <th>Eligibility Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="recommended-courses-tbody">
+                      <!-- Populated by JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Student Course Registration History -->
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <h3 class="card-title">📜 Enrollment History & Grades</h3>
+                    <p class="card-subtitle">All past and current course attempts</p>
+                  </div>
+                  <button class="btn btn-primary btn-sm" onclick="openAddEnrollmentModal()">➕ Add Enrollment</button>
+                </div>
+
+                <div class="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Code</th>
+                        <th>Title</th>
+                        <th>Session</th>
+                        <th>Attempt</th>
+                        <th>Grade</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="student-enrollments-tbody">
+                      <!-- Populated by JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB: ENROLLMENTS ================= -->
+        <section id="view-enrollments" class="tab-view" style="display: none;">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Course Enrollments Management</h2>
+              <p class="card-subtitle">Filter and update student grades, attempt types (NORMAL, C1, C2), and passing status</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openAddEnrollmentModal()">➕ Record New Enrollment</button>
+          </div>
+
+          <div class="action-bar">
+            <div class="search-filter-group">
+              <label for="filter-enrollment-sem" style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">Filter by Semester:</label>
+              <select id="filter-enrollment-sem" class="select">
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+                <option value="3">Semester 3</option>
+                <option value="4">Semester 4</option>
+                <option value="5">Semester 5</option>
+                <option value="6">Semester 6</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Matric No</th>
+                  <th>Student Name</th>
+                  <th>Course Code</th>
+                  <th>Course Title</th>
+                  <th>Intake / Session</th>
+                  <th>Attempt</th>
+                  <th>Grade</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="enrollments-tbody">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ================= TAB: COURSES & PREREQUISITES ================= -->
+        <section id="view-courses" class="tab-view" style="display: none;">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Course Catalog & Prerequisites</h2>
+              <p class="card-subtitle">Manage curriculum courses, credit hours, program affiliations, and prerequisite chains</p>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openAddCourseModal()">➕ Add New Course</button>
+          </div>
+
+          <div class="action-bar">
+            <div class="search-filter-group">
+              <input type="text" id="search-courses" class="input" placeholder="🔍 Search Course Code or Title..." style="width: 260px;">
+              <select id="filter-course-program" class="select">
+                <option value="">All Programs</option>
+              </select>
+              <select id="filter-course-cohort" class="select">
+                <option value="">All Cohorts</option>
+              </select>
+              <select id="filter-course-sem" class="select">
+                <option value="">All Semesters</option>
+                <option value="1">Sem 1</option>
+                <option value="2">Sem 2</option>
+                <option value="3">Sem 3</option>
+                <option value="4">Sem 4</option>
+                <option value="5">Sem 5</option>
+                <option value="6">Sem 6</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Course Title</th>
+                  <th>Default Sem</th>
+                  <th>Credit Hours</th>
+                  <th>Program</th>
+                  <th>Cohort</th>
+                  <th>Prerequisites</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="courses-tbody">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ================= TAB: IMPORT & EXPORT ================= -->
+        <section id="view-import-export" class="tab-view" style="display: none;">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">Data Center: Import & Export</h2>
+              <p class="card-subtitle">Batch import data from Excel spreadsheets, CSVs, or PDF mark sheets, and download reports</p>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem; margin-top: 1rem;">
+            
+            <!-- Import Card -->
+            <div class="card">
+              <h3 class="card-title" style="margin-bottom: 0.5rem;">📥 Batch File Import</h3>
+              <p class="card-subtitle" style="margin-bottom: 1.25rem;">Upload an Excel (.xlsx/.xls), CSV, or PDF document. Columns are mapped automatically.</p>
+
+              <form id="import-form">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                  <label class="form-label" for="import-type-select">Target Data Entity</label>
+                  <select id="import-type-select" class="select">
+                    <option value="All">All Types (Auto-detect Students, Courses & Enrollments)</option>
+                    <option value="Students">Students Only</option>
+                    <option value="Courses">Courses Only</option>
+                    <option value="Enrollments">Enrollments Only</option>
+                    <option value="Prerequisites">Prerequisites Only</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                  <label class="form-label" for="file-upload-input">Select Document</label>
+                  <input type="file" id="file-upload-input" class="input" accept=".xlsx,.xls,.csv,.pdf,.txt" required>
+                  <small style="color: var(--text-muted); margin-top: 0.35rem;">Supported: Microsoft Excel (.xlsx/.xls), CSV (.csv), or PDF (.pdf)</small>
+                </div>
+
+                <button type="submit" id="upload-submit-btn" class="btn btn-primary" style="width: 100%;">
+                  Upload & Process Data
+                </button>
+              </form>
+
+              <div id="import-result-summary" style="margin-top: 1.25rem; display: none;"></div>
+            </div>
+
+            <!-- Export Card -->
+            <div class="card">
+              <h3 class="card-title" style="margin-bottom: 0.5rem;">📤 Export Reports & Backups</h3>
+              <p class="card-subtitle" style="margin-bottom: 1.25rem;">Download student academic databases and records for local reporting</p>
+
+              <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <strong>Standard CSV Spreadsheet</strong>
+                    <div style="font-size: 0.78rem; color: var(--text-muted);">Raw tabular student data suitable for external analysis</div>
+                  </div>
+                  <button class="btn btn-secondary btn-sm" onclick="triggerExport('csv')">Download CSV</button>
+                </div>
+
+                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <strong>Microsoft Excel Workbook (.xls)</strong>
+                    <div style="font-size: 0.78rem; color: var(--text-muted);">Formatted spreadsheet with calculated numeric cells</div>
+                  </div>
+                  <button class="btn btn-secondary btn-sm" onclick="triggerExport('xlsx')">Download Excel</button>
+                </div>
+
+                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <strong>Printable Academic Report</strong>
+                    <div style="font-size: 0.78rem; color: var(--text-muted);">Generate print-friendly student cohort report</div>
+                  </div>
+                  <button class="btn btn-secondary btn-sm" onclick="window.print()">Print Report</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <!-- Mobile Bottom Navigation Bar (Visible on phones & tablets) -->
+    <nav class="mobile-bottom-nav">
+      <a class="bottom-nav-item active" data-tab="dashboard">
+        <span class="bottom-nav-icon">📊</span>
+        <span class="bottom-nav-label">Dash</span>
+      </a>
+      <a class="bottom-nav-item" data-tab="students">
+        <span class="bottom-nav-icon">👨‍🎓</span>
+        <span class="bottom-nav-label">Students</span>
+      </a>
+      <a class="bottom-nav-item" data-tab="planner">
+        <span class="bottom-nav-icon">🎯</span>
+        <span class="bottom-nav-label">Planner</span>
+      </a>
+      <a class="bottom-nav-item" data-tab="courses">
+        <span class="bottom-nav-icon">📚</span>
+        <span class="bottom-nav-label">Courses</span>
+      </a>
+      <a class="bottom-nav-item" id="bottom-more-btn">
+        <span class="bottom-nav-icon">☰</span>
+        <span class="bottom-nav-label">Menu</span>
+      </a>
+    </nav>
+  </div>
+
+  <!-- ================= MODALS ================= -->
+
+  <!-- Student Add/Edit Modal -->
+  <div id="student-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="student-modal-title" class="modal-title">➕ Add Student</h3>
+        <button class="btn-icon" onclick="closeModal('student-modal')">&times;</button>
+      </div>
+      <form id="student-form">
+        <input type="hidden" id="student-is-edit" value="false">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="student-form-matric">Matric Number</label>
+            <input type="text" id="student-form-matric" class="input" placeholder="e.g. 08DEE24F1001" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="student-form-name">Student Full Name</label>
+            <input type="text" id="student-form-name" class="input" placeholder="e.g. MUHAMMAD HAKIMI BIN AZIZ" required>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label class="form-label" for="student-form-cgpa">Current CGPA</label>
+              <input type="number" id="student-form-cgpa" class="input" step="0.01" min="0" max="4.0" value="0.00" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="student-form-semester">Current Semester</label>
+              <input type="number" id="student-form-semester" class="input" min="1" max="8" value="1" required>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label class="form-label" for="student-form-class">Class</label>
+              <input type="text" id="student-form-class" class="input" placeholder="e.g. DEE1A">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="student-program-select">Program</label>
+              <select id="student-program-select" class="select">
+                <!-- Options populated by JS -->
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="student-advisor-select">Assigned Academic Advisor</label>
+            <select id="student-advisor-select" class="select">
+              <!-- Options populated by JS -->
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('student-modal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Student</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Course Add/Edit Modal -->
+  <div id="course-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="course-modal-title" class="modal-title">➕ Add Course</h3>
+        <button class="btn-icon" onclick="closeModal('course-modal')">&times;</button>
+      </div>
+      <form id="course-form">
+        <input type="hidden" id="course-is-edit" value="false">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="course-form-code">Course Code</label>
+            <input type="text" id="course-form-code" class="input" placeholder="e.g. DEE10013" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="course-form-name">Course Title</label>
+            <input type="text" id="course-form-name" class="input" placeholder="e.g. ELECTRICAL CIRCUITS" required>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label class="form-label" for="course-form-sem">Default Semester</label>
+              <input type="number" id="course-form-sem" class="input" min="1" max="8" value="1" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="course-form-credits">Credit Hours</label>
+              <input type="number" id="course-form-credits" class="input" min="1" max="10" value="3" required>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label class="form-label" for="course-program-select">Program</label>
+              <select id="course-program-select" class="select"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="course-form-cohort">Cohort / Intake</label>
+              <input type="text" id="course-form-cohort" class="input" placeholder="e.g. 2025/2026">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('course-modal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Course</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Prerequisite Link Modal -->
+  <div id="prereq-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">🔗 Link Prerequisite Course</h3>
+        <button class="btn-icon" onclick="closeModal('prereq-modal')">&times;</button>
+      </div>
+      <form id="prereq-form">
+        <input type="hidden" id="prereq-target-course">
+        <div class="modal-body">
+          <p style="font-size: 0.88rem; color: var(--text-secondary);">
+            Target Course: <strong id="prereq-target-display" style="color: var(--accent-blue);">-</strong>
+          </p>
+          <div class="form-group" style="margin-top: 1rem;">
+            <label class="form-label" for="prereq-select-code">Prerequisite Course That Must Be Passed First</label>
+            <select id="prereq-select-code" class="select" required></select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('prereq-modal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Link Prerequisite</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Enrollment Modal -->
+  <div id="add-enrollment-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">➕ Record Course Enrollment</h3>
+        <button class="btn-icon" onclick="closeModal('add-enrollment-modal')">&times;</button>
+      </div>
+      <form id="add-enrollment-form">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="enr-student-select">Student</label>
+            <select id="enr-student-select" class="select" required></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="enr-course-select">Course</label>
+            <select id="enr-course-select" class="select" required></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="enr-session">Intake Session / Semester Session</label>
+            <input type="text" id="enr-session" class="input" placeholder="e.g. 2025/2026-SEM1" required>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label class="form-label" for="enr-attempt">Attempt Type</label>
+              <select id="enr-attempt" class="select">
+                <option value="NORMAL">NORMAL</option>
+                <option value="C1">C1 (Carry 1)</option>
+                <option value="C2">C2 (Carry 2)</option>
+                <option value="TANGGUH">TANGGUH</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="enr-grade">Grade (Optional)</label>
+              <select id="enr-grade" class="select">
+                <option value="">In Progress</option>
+                <option value="A+">A+</option>
+                <option value="A">A</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B">B</option>
+                <option value="B-">B-</option>
+                <option value="C+">C+</option>
+                <option value="C">C</option>
+                <option value="C-">C-</option>
+                <option value="D+">D+</option>
+                <option value="D">D</option>
+                <option value="E">E (Gagal)</option>
+                <option value="F">F (Gagal)</option>
+                <option value="TANGGUH">TANGGUH</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('add-enrollment-modal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Record Enrollment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Enrollment Modal -->
+  <div id="edit-enrollment-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="edit-enr-title" class="modal-title">✏️ Edit Enrollment</h3>
+        <button class="btn-icon" onclick="closeModal('edit-enrollment-modal')">&times;</button>
+      </div>
+      <form id="edit-enrollment-form">
+        <input type="hidden" id="edit-enr-id">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="edit-enr-session">Semester Session</label>
+            <input type="text" id="edit-enr-session" class="input" required>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label class="form-label" for="edit-enr-attempt">Attempt Type</label>
+              <select id="edit-enr-attempt" class="select">
+                <option value="NORMAL">NORMAL</option>
+                <option value="C1">C1</option>
+                <option value="C2">C2</option>
+                <option value="TANGGUH">TANGGUH</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="edit-enr-grade">Grade</label>
+              <select id="edit-enr-grade" class="select">
+                <option value="">In Progress</option>
+                <option value="A+">A+</option>
+                <option value="A">A</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B">B</option>
+                <option value="B-">B-</option>
+                <option value="C+">C+</option>
+                <option value="C">C</option>
+                <option value="C-">C-</option>
+                <option value="D+">D+</option>
+                <option value="D">D</option>
+                <option value="E">E (Gagal)</option>
+                <option value="F">F (Gagal)</option>
+                <option value="TANGGUH">TANGGUH</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('edit-enrollment-modal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Update Grade</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
