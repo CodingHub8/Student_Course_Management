@@ -21,7 +21,7 @@
       <form id="login-form">
         <div class="form-group" style="text-align: left; margin-bottom: 1rem;">
           <label class="form-label" for="login-ic">IC Number / Staff ID</label>
-          <input type="text" id="login-ic" class="input" placeholder="e.g. 850101-08-1234 or ADM01" required autocomplete="username">
+          <input type="text" id="login-ic" class="input" placeholder="e.g. 850101081234" required autocomplete="username">
         </div>
 
         <div class="form-group" style="text-align: left; margin-bottom: 1.5rem;">
@@ -47,14 +47,14 @@
   <div id="register-modal" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 class="modal-title">📝 Register New Academic Advisor</h3>
+        <h3 class="modal-title">Register New Academic Advisor</h3>
         <button class="btn-icon" onclick="closeModal('register-modal')">&times;</button>
       </div>
       <form id="register-form">
         <div class="modal-body">
           <div class="form-group">
             <label class="form-label" for="reg-ic">IC Number (Username)</label>
-            <input type="text" id="reg-ic" class="input" placeholder="e.g. 900512-08-5678" required>
+            <input type="text" id="reg-ic" class="input" placeholder="e.g. 850101081234" required>
           </div>
           <div class="form-group">
             <label class="form-label" for="reg-name">Full Name</label>
@@ -104,11 +104,11 @@
 
       <div class="nav-right">
         <button id="sync-metrics-btn" class="btn btn-secondary btn-sm" onclick="triggerSyncMetrics()" title="Recompute and synchronize all student CGPA and credit totals">
-          ⚡ Sync Metrics
+          Sync Metrics
         </button>
         
         <button id="theme-toggle-btn" class="btn btn-secondary btn-sm" title="Toggle Dark/Light Mode">
-          ☀️
+          <svg id="theme-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
         </button>
 
         <div class="user-profile-chip">
@@ -120,7 +120,7 @@
         </div>
 
         <button id="logout-btn" class="btn btn-secondary btn-sm" title="Sign Out">
-          🚪 Logout
+          Logout
         </button>
       </div>
     </header>
@@ -141,28 +141,28 @@
           <button id="close-drawer-btn" class="btn-icon" aria-label="Close Navigation Drawer" style="font-size: 1.4rem; padding: 0.2rem 0.5rem;">&times;</button>
         </div>
         <a class="nav-link active" data-tab="dashboard" id="nav-dash-link">
-          <span class="nav-icon">📊</span>
+          <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span>
           <span>Dashboard</span>
         </a>
         <a class="nav-link" data-tab="students" id="nav-students-link">
-          <span class="nav-icon">👨‍🎓</span>
+          <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>
           <span>Students Directory</span>
         </a>
         <a class="nav-link" data-tab="planner" id="nav-planner-link">
-          <span class="nav-icon">🎯</span>
+          <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
           <span>Academic Planner</span>
         </a>
         <a class="nav-link" data-tab="enrollments" id="nav-enrollments-link">
-          <span class="nav-icon">📝</span>
+          <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 12h6M9 16h6"/></svg></span>
           <span>Enrollments</span>
         </a>
         <a class="nav-link" data-tab="courses" id="nav-courses-link">
-          <span class="nav-icon">📚</span>
+          <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
           <span>Course Catalog</span>
         </a>
         <div class="sidebar-divider"></div>
         <a class="nav-link" data-tab="import-export" id="nav-import-link">
-          <span class="nav-icon">📥</span>
+          <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
           <span>Import & Export</span>
         </a>
       </aside>
@@ -178,14 +178,14 @@
               <p class="card-subtitle">Real-time academic performance summary and student progression tracking</p>
             </div>
             <button class="btn btn-primary btn-sm" onclick="openAddStudentModal()">
-              ➕ Add New Student
+              Add Student
             </button>
           </div>
 
           <!-- Stats Grid -->
           <div class="metrics-grid">
             <div class="stat-card">
-              <div class="stat-icon blue">👨‍🎓</div>
+              <div class="stat-icon blue"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></div>
               <div class="stat-info">
                 <span class="stat-label">Total Students</span>
                 <span id="dash-total-students" class="stat-value">0</span>
@@ -193,7 +193,7 @@
             </div>
 
             <div class="stat-card">
-              <div class="stat-icon teal">📈</div>
+              <div class="stat-icon teal"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
               <div class="stat-info">
                 <span class="stat-label">Pass Rate</span>
                 <span id="dash-pass-rate" class="stat-value">0.0%</span>
@@ -201,7 +201,7 @@
             </div>
 
             <div class="stat-card">
-              <div class="stat-icon purple">🎓</div>
+              <div class="stat-icon purple"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg></div>
               <div class="stat-info">
                 <span class="stat-label">Average CGPA</span>
                 <span id="dash-avg-cgpa" class="stat-value">0.00</span>
@@ -209,7 +209,7 @@
             </div>
 
             <div class="stat-card">
-              <div class="stat-icon amber">⚠️</div>
+              <div class="stat-icon amber"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
               <div class="stat-info">
                 <span class="stat-label">At Risk (CGPA &lt; 2.2)</span>
                 <span id="dash-critical-students" class="stat-value">0</span>
@@ -217,7 +217,7 @@
             </div>
 
             <div class="stat-card">
-              <div class="stat-icon teal">💼</div>
+              <div class="stat-icon teal"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>
               <div class="stat-info">
                 <span class="stat-label">Internship Ready</span>
                 <span id="dash-internship-ready" class="stat-value">0</span>
@@ -259,16 +259,16 @@
               <p class="card-subtitle">Manage student records, track cumulative grade points, and monitor credit loads</p>
             </div>
             <div style="display: flex; gap: 0.5rem;">
-              <button class="btn btn-secondary btn-sm" onclick="triggerExport('csv')">📄 Export CSV</button>
-              <button class="btn btn-secondary btn-sm" onclick="triggerExport('xlsx')">📊 Export Excel</button>
-              <button class="btn btn-primary btn-sm" onclick="openAddStudentModal()">➕ Add Student</button>
+              <button class="btn btn-secondary btn-sm" onclick="triggerExport('csv')">Export CSV</button>
+              <button class="btn btn-secondary btn-sm" onclick="triggerExport('xlsx')">Export Excel</button>
+              <button class="btn btn-primary btn-sm" onclick="openAddStudentModal()">Add Student</button>
             </div>
           </div>
 
           <!-- Search & Filter Controls -->
           <div class="action-bar">
             <div class="search-filter-group">
-              <input type="text" id="search-students" class="input" placeholder="🔍 Search by Matric, Name, or Class..." style="width: 280px;">
+              <input type="text" id="search-students" class="input" placeholder="Search by Matric, Name, or Class..." style="width: 280px;">
               <select id="filter-student-program" class="select">
                 <option value="">All Programs</option>
               </select>
@@ -327,7 +327,7 @@
             <!-- Left Column: Student Spotlight & Credit Limits -->
             <div class="student-spotlight-card">
               <div class="spotlight-header">
-                <div class="spotlight-avatar">🎓</div>
+                <div class="spotlight-avatar"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></div>
                 <div class="spotlight-title">
                   <h3 id="spotlight-name">-</h3>
                   <p id="spotlight-matric">-</p>
@@ -363,7 +363,7 @@
               <!-- Important Retake Warning Section -->
               <div id="retakes-section" style="margin-top: 1.25rem; display: none;">
                 <h4 style="font-size: 0.9rem; color: var(--status-danger); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
-                  <span>⚠️</span> Priority Retakes (Failed Courses)
+                  <span>Notice:</span> Priority Retakes (Failed Courses)
                 </h4>
                 <div id="retakes-list">
                   <!-- List of failed courses -->
@@ -378,7 +378,7 @@
               <div class="card">
                 <div class="card-header">
                   <div>
-                    <h3 class="card-title">📋 Recommended Courses for Next Semester</h3>
+                    <h3 class="card-title">Recommended Courses for Next Semester</h3>
                     <p class="card-subtitle">Courses filtered against prerequisites and eligibility criteria</p>
                   </div>
                 </div>
@@ -406,10 +406,10 @@
               <div class="card">
                 <div class="card-header">
                   <div>
-                    <h3 class="card-title">📜 Enrollment History & Grades</h3>
+                    <h3 class="card-title">Enrollment History & Grades</h3>
                     <p class="card-subtitle">All past and current course attempts</p>
                   </div>
-                  <button class="btn btn-primary btn-sm" onclick="openAddEnrollmentModal()">➕ Add Enrollment</button>
+                  <button class="btn btn-primary btn-sm" onclick="openAddEnrollmentModal()">Add Enrollment</button>
                 </div>
 
                 <div class="table-container">
@@ -443,7 +443,7 @@
               <h2 class="card-title">Course Enrollments Management</h2>
               <p class="card-subtitle">Filter and update student grades, attempt types (NORMAL, C1, C2), and passing status</p>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="openAddEnrollmentModal()">➕ Record New Enrollment</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddEnrollmentModal()">Record New Enrollment</button>
           </div>
 
           <div class="action-bar">
@@ -488,12 +488,12 @@
               <h2 class="card-title">Course Catalog & Prerequisites</h2>
               <p class="card-subtitle">Manage curriculum courses, credit hours, program affiliations, and prerequisite chains</p>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="openAddCourseModal()">➕ Add New Course</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddCourseModal()">Add New Course</button>
           </div>
 
           <div class="action-bar">
             <div class="search-filter-group">
-              <input type="text" id="search-courses" class="input" placeholder="🔍 Search Course Code or Title..." style="width: 260px;">
+              <input type="text" id="search-courses" class="input" placeholder="Search Course Code or Title..." style="width: 260px;">
               <select id="filter-course-program" class="select">
                 <option value="">All Programs</option>
               </select>
@@ -546,7 +546,7 @@
             
             <!-- Import Card -->
             <div class="card">
-              <h3 class="card-title" style="margin-bottom: 0.5rem;">📥 Batch File Import</h3>
+              <h3 class="card-title" style="margin-bottom: 0.5rem;">Batch File Import</h3>
               <p class="card-subtitle" style="margin-bottom: 1.25rem;">Upload an Excel (.xlsx/.xls), CSV, or PDF document. Columns are mapped automatically.</p>
 
               <form id="import-form">
@@ -577,7 +577,7 @@
 
             <!-- Export Card -->
             <div class="card">
-              <h3 class="card-title" style="margin-bottom: 0.5rem;">📤 Export Reports & Backups</h3>
+              <h3 class="card-title" style="margin-bottom: 0.5rem;">Export Reports & Backups</h3>
               <p class="card-subtitle" style="margin-bottom: 1.25rem;">Download student academic databases and records for local reporting</p>
 
               <div style="display: flex; flex-direction: column; gap: 1rem;">
@@ -616,23 +616,23 @@
     <!-- Mobile Bottom Navigation Bar (Visible on phones & tablets) -->
     <nav class="mobile-bottom-nav">
       <a class="bottom-nav-item active" data-tab="dashboard">
-        <span class="bottom-nav-icon">📊</span>
+        <span class="bottom-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span>
         <span class="bottom-nav-label">Dash</span>
       </a>
       <a class="bottom-nav-item" data-tab="students">
-        <span class="bottom-nav-icon">👨‍🎓</span>
+        <span class="bottom-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>
         <span class="bottom-nav-label">Students</span>
       </a>
       <a class="bottom-nav-item" data-tab="planner">
-        <span class="bottom-nav-icon">🎯</span>
+        <span class="bottom-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
         <span class="bottom-nav-label">Planner</span>
       </a>
       <a class="bottom-nav-item" data-tab="courses">
-        <span class="bottom-nav-icon">📚</span>
+        <span class="bottom-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
         <span class="bottom-nav-label">Courses</span>
       </a>
       <a class="bottom-nav-item" id="bottom-more-btn">
-        <span class="bottom-nav-icon">☰</span>
+        <span class="bottom-nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></span>
         <span class="bottom-nav-label">Menu</span>
       </a>
     </nav>
@@ -644,7 +644,7 @@
   <div id="student-modal" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 id="student-modal-title" class="modal-title">➕ Add Student</h3>
+        <h3 id="student-modal-title" class="modal-title">Add Student</h3>
         <button class="btn-icon" onclick="closeModal('student-modal')">&times;</button>
       </div>
       <form id="student-form">
@@ -699,7 +699,7 @@
   <div id="course-modal" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 id="course-modal-title" class="modal-title">➕ Add Course</h3>
+        <h3 id="course-modal-title" class="modal-title">Add Course</h3>
         <button class="btn-icon" onclick="closeModal('course-modal')">&times;</button>
       </div>
       <form id="course-form">
@@ -746,7 +746,7 @@
   <div id="prereq-modal" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 class="modal-title">🔗 Link Prerequisite Course</h3>
+        <h3 class="modal-title">Link Prerequisite Course</h3>
         <button class="btn-icon" onclick="closeModal('prereq-modal')">&times;</button>
       </div>
       <form id="prereq-form">
@@ -772,7 +772,7 @@
   <div id="add-enrollment-modal" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 class="modal-title">➕ Record Course Enrollment</h3>
+        <h3 class="modal-title">Record Course Enrollment</h3>
         <button class="btn-icon" onclick="closeModal('add-enrollment-modal')">&times;</button>
       </div>
       <form id="add-enrollment-form">
@@ -833,7 +833,7 @@
   <div id="edit-enrollment-modal" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 id="edit-enr-title" class="modal-title">✏️ Edit Enrollment</h3>
+        <h3 id="edit-enr-title" class="modal-title">Edit Enrollment</h3>
         <button class="btn-icon" onclick="closeModal('edit-enrollment-modal')">&times;</button>
       </div>
       <form id="edit-enrollment-form">

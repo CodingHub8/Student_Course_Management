@@ -20,7 +20,7 @@ function showToast(message, type = 'info') {
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
   toast.innerHTML = `
-    <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+    
     <span>${message}</span>
   `;
   container.appendChild(toast);
@@ -90,7 +90,7 @@ function toggleTheme() {
 function updateThemeButton(theme) {
   const btn = document.getElementById('theme-toggle-btn');
   if (btn) {
-    btn.innerHTML = theme === 'dark' ? '☀️' : '🌙';
+    updateThemeIcon(theme);
     btn.title = `Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`;
   }
 }
@@ -270,7 +270,7 @@ function populateDropdowns() {
     const isFilter = sel.id.startsWith('filter-');
     sel.innerHTML = isFilter ? '<option value="">All Programs</option>' : '<option value="">Select Program</option>';
     
-    const allProgs = Array.from(new Set([...State.programs, 'DEE', 'DEP', 'DKM', 'DTP', 'DGU']));
+    const allProgs = Array.from(new Set([...State.programs, 'DEE', 'DET', 'DDT', 'DPM', 'DSK']));
     allProgs.filter(Boolean).forEach(p => {
       const opt = document.createElement('option');
       opt.value = p;
@@ -355,7 +355,7 @@ function renderDashboard() {
       <td>${s.program || '-'}</td>
       <td>${getCGPABadge(s.cgpa)}</td>
       <td>
-        <button class="btn btn-secondary btn-sm" onclick="openPlannerFor('${s.matric}')">🎯 Plan Semester</button>
+        <button class="btn btn-secondary btn-sm" onclick="openPlannerFor('${s.matric}')">Plan Semester</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -397,9 +397,9 @@ function renderStudents() {
       <td><span class="badge purple">${s.program || '-'}</span></td>
       <td><small style="color: var(--text-secondary);">${s.advisor_name || 'Unassigned'}</small></td>
       <td style="white-space: nowrap;">
-        <button class="btn btn-secondary btn-sm" onclick="openPlannerFor('${s.matric}')" title="Academic Course Planner">🎯 Plan</button>
-        <button class="btn btn-secondary btn-sm" onclick="openEditStudentModal('${s.matric}')" title="Edit Student">✏️</button>
-        <button class="btn btn-danger btn-sm" onclick="confirmDeleteStudent('${s.matric}')" title="Delete">🗑️</button>
+        <button class="btn btn-secondary btn-sm" onclick="openPlannerFor('${s.matric}')" title="Academic Course Planner">Plan</button>
+        <button class="btn btn-secondary btn-sm" onclick="openEditStudentModal('${s.matric}')" title="Edit Student">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDeleteStudent('${s.matric}')" title="Delete">Delete</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -407,7 +407,7 @@ function renderStudents() {
 }
 
 function openAddStudentModal() {
-  document.getElementById('student-modal-title').textContent = '➕ Add New Student';
+  document.getElementById('student-modal-title').textContent = 'Add New Student';
   document.getElementById('student-form-matric').value = '';
   document.getElementById('student-form-matric').disabled = false;
   document.getElementById('student-form-name').value = '';
@@ -422,7 +422,7 @@ function openEditStudentModal(matric) {
   const s = State.students.find(x => x.matric === matric);
   if (!s) return;
 
-  document.getElementById('student-modal-title').textContent = `✏️ Edit Student - ${matric}`;
+  document.getElementById('student-modal-title').textContent = `Edit Student - ${matric}`;
   document.getElementById('student-form-matric').value = s.matric;
   document.getElementById('student-form-matric').disabled = true;
   document.getElementById('student-form-name').value = s.name;
@@ -581,9 +581,9 @@ function displayPlannerData(p) {
   
   const internEl = document.getElementById('spotlight-internship-badge');
   if (p.internship_eligible) {
-    internEl.innerHTML = `<span class="badge success">✅ Eligible for Internship (≥90 Credits)</span>`;
+    internEl.innerHTML = `<span class="badge success">Eligible for Internship (≥90 Credits)</span>`;
   } else {
-    internEl.innerHTML = `<span class="badge warning">⏳ Pending Internship (${p.total_credits_earned || 0} / 90 Credits)</span>`;
+    internEl.innerHTML = `<span class="badge warning">Pending Internship (${p.total_credits_earned || 0} / 90 Credits)</span>`;
   }
 
   // Credit Gauge & Policy
@@ -618,7 +618,7 @@ function displayPlannerData(p) {
           <strong>${r.course_code} - ${r.course_name}</strong>
           <div style="font-size: 0.78rem; color: var(--text-muted);">Credit Hours: ${r.credit_hours} • Last Grade: <span class="badge danger">${r.last_grade || 'F'}</span> • Attempt: ${r.last_attempt || 'NORMAL'}</div>
         </div>
-        <span class="badge carry">⚠️ MUST RETAKE (C1/C2)</span>
+        <span class="badge carry">MUST RETAKE (C1/C2)</span>
       </div>
     `).join('');
   } else {
@@ -652,7 +652,7 @@ function displayPlannerData(p) {
         <td><strong>${c.credits}</strong> hrs</td>
         <td>${statusHtml}</td>
         <td>
-          <button class="btn btn-secondary btn-sm" onclick="quickEnroll('${p.matric}', '${c.code}', ${c.semester}, '${isCarry ? 'C1' : 'NORMAL'}')">➕ Enroll</button>
+          <button class="btn btn-secondary btn-sm" onclick="quickEnroll('${p.matric}', '${c.code}', ${c.semester}, '${isCarry ? 'C1' : 'NORMAL'}')">Enroll</button>
         </td>
       `;
       recTbody.appendChild(tr);
@@ -675,7 +675,7 @@ function displayPlannerData(p) {
         <td><strong>${e.grade || '-'}</strong></td>
         <td>${getStatusBadge(e.pass_status, e.grade)}</td>
         <td>
-          <button class="btn btn-secondary btn-sm" onclick="openEditEnrollmentModal(${e.id}, '${e.course_code}', '${e.course_name}', '${e.semester_session}', '${e.attempt_type}', '${e.grade}', '${e.pass_status}')">✏️ Edit</button>
+          <button class="btn btn-secondary btn-sm" onclick="openEditEnrollmentModal(${e.id}, '${e.course_code}', '${e.course_name}', '${e.semester_session}', '${e.attempt_type}', '${e.grade}', '${e.pass_status}')">Edit</button>
         </td>
       `;
       enrTbody.appendChild(tr);
@@ -793,7 +793,7 @@ async function handleSaveEnrollment(e) {
 
 function openEditEnrollmentModal(id, ccode, cname, session, attempt, grade, passStatus) {
   document.getElementById('edit-enr-id').value = id;
-  document.getElementById('edit-enr-title').textContent = `✏️ Edit Enrollment - ${ccode}`;
+  document.getElementById('edit-enr-title').textContent = `Edit Enrollment - ${ccode}`;
   document.getElementById('edit-enr-session').value = session;
   document.getElementById('edit-enr-attempt').value = attempt;
   document.getElementById('edit-enr-grade').value = grade && grade !== '-' ? grade : '';
@@ -863,9 +863,9 @@ function renderCourses() {
       <td>${c.cohort || '-'}</td>
       <td>${prereqBadges}</td>
       <td style="white-space: nowrap;">
-        <button class="btn btn-secondary btn-sm" onclick="openAddPrereqModal('${c.course_code}')" title="Add Prerequisite">🔗 Link</button>
-        <button class="btn btn-secondary btn-sm" onclick="openEditCourseModal('${c.course_code}')" title="Edit">✏️</button>
-        <button class="btn btn-danger btn-sm" onclick="confirmDeleteCourse('${c.course_code}')" title="Delete">🗑️</button>
+        <button class="btn btn-secondary btn-sm" onclick="openAddPrereqModal('${c.course_code}')" title="Add Prerequisite">Link</button>
+        <button class="btn btn-secondary btn-sm" onclick="openEditCourseModal('${c.course_code}')" title="Edit">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDeleteCourse('${c.course_code}')" title="Delete">Delete</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -873,7 +873,7 @@ function renderCourses() {
 }
 
 function openAddCourseModal() {
-  document.getElementById('course-modal-title').textContent = '➕ Add New Course';
+  document.getElementById('course-modal-title').textContent = 'Add New Course';
   document.getElementById('course-form-code').value = '';
   document.getElementById('course-form-code').disabled = false;
   document.getElementById('course-form-name').value = '';
@@ -888,7 +888,7 @@ function openEditCourseModal(code) {
   const c = State.courses.find(x => x.course_code === code);
   if (!c) return;
 
-  document.getElementById('course-modal-title').textContent = `✏️ Edit Course - ${code}`;
+  document.getElementById('course-modal-title').textContent = `Edit Course - ${code}`;
   document.getElementById('course-form-code').value = c.course_code;
   document.getElementById('course-form-code').disabled = true;
   document.getElementById('course-form-name').value = c.course_name;
@@ -1030,7 +1030,7 @@ async function handleFileUpload(e) {
       resultDiv.style.display = 'block';
       resultDiv.innerHTML = `
         <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid var(--status-success); padding: 1rem; border-radius: var(--radius-md); color: var(--status-success);">
-          <strong>🎉 Import Completed!</strong>
+          <strong>Import Completed!</strong>
           <p style="margin-top: 0.25rem;">${res.message}</p>
         </div>
       `;
@@ -1045,7 +1045,7 @@ async function handleFileUpload(e) {
       resultDiv.style.display = 'block';
       resultDiv.innerHTML = `
         <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--status-danger); padding: 1rem; border-radius: var(--radius-md); color: var(--status-danger);">
-          <strong>❌ Import Failed:</strong>
+          <strong>Import Failed:</strong>
           <p style="margin-top: 0.25rem;">${err.message}</p>
         </div>
       `;
@@ -1132,3 +1132,13 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
   });
 });
+
+function updateThemeIcon(theme) {
+  const icon = document.getElementById('theme-icon');
+  if (!icon) return;
+  if (theme === 'dark') {
+    icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  } else {
+    icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  }
+}
